@@ -1,0 +1,318 @@
+{
+  "timestamp": "2026-02-13T20:49:36+08:00",
+  "project_name": "AIPortrait",
+  "description": "基于 BuildAdmin v2.3.5 框架构建的 AI 肖像管理系统，采用前后端分离架构",
+  "version": "v2.3.5",
+  "scan_summary": {
+    "total_modules": 5,
+    "scanned_modules": 5,
+    "coverage_percentage": 95,
+    "truncated": false,
+    "scan_date": "2026-02-13",
+    "total_files_estimated": 850,
+    "scanned_files": 810,
+    "ignored_files": 12000
+  },
+  "modules": [
+    {
+      "name": "backend",
+      "path": "app",
+      "type": "php",
+      "language": "PHP",
+      "framework": "ThinkPHP 8.1",
+      "entry_points": [
+        "app/admin/controller/Index.php",
+        "app/api/controller/Index.php"
+      ],
+      "key_directories": [
+        "app/admin/controller",
+        "app/admin/controller/ai",
+        "app/api/controller",
+        "app/common/controller",
+        "app/common/library",
+        "app/common/model"
+      ],
+      "key_files": [
+        "app/admin/controller/ai/Template.php",
+        "app/admin/controller/ai/TemplateSub.php",
+        "app/admin/controller/ai/Style.php",
+        "app/admin/controller/ai/Task.php",
+        "app/api/controller/Portrait.php",
+        "app/api/controller/User.php",
+        "app/api/controller/Score.php",
+        "app/api/controller/Agreement.php",
+        "app/api/controller/Banner.php",
+        "app/common/model/AiTemplate.php",
+        "app/common/model/AiTemplateSub.php",
+        "app/common/model/AiStyle.php",
+        "app/common/model/AiTask.php",
+        "app/common/model/AiTaskResult.php",
+        "app/common/model/User.php",
+        "app/common/model/ScoreConfig.php",
+        "app/common/model/ScoreRechargePackage.php",
+        "app/common/model/Agreement.php",
+        "app/common/model/Banner.php"
+      ],
+      "has_tests": false,
+      "has_config": true,
+      "config_files": [
+        "config/app.php",
+        "config/database.php",
+        "config/buildadmin.php",
+        "config/route.php"
+      ],
+      "business_modules": [
+        {
+          "name": "AI写真管理",
+          "controllers": [
+            "app/admin/controller/ai/Template.php",
+            "app/admin/controller/ai/TemplateSub.php",
+            "app/admin/controller/ai/Style.php",
+            "app/admin/controller/ai/Task.php"
+          ],
+          "api_controllers": [
+            "app/api/controller/Portrait.php"
+          ],
+          "models": [
+            "app/common/model/AiTemplate.php",
+            "app/common/model/AiTemplateSub.php",
+            "app/common/model/AiStyle.php",
+            "app/common/model/AiTask.php",
+            "app/common/model/AiTaskResult.php"
+          ]
+        },
+        {
+          "name": "积分系统",
+          "api_controllers": [
+            "app/api/controller/Score.php"
+          ],
+          "models": [
+            "app/common/model/ScoreConfig.php",
+            "app/common/model/ScoreRechargePackage.php",
+            "app/common/model/ScoreRechargeOrder.php",
+            "app/common/model/UserScoreLog.php"
+          ]
+        },
+        {
+          "name": "用户系统",
+          "api_controllers": [
+            "app/api/controller/User.php",
+            "app/api/controller/Account.php"
+          ],
+          "models": [
+            "app/common/model/User.php",
+            "app/common/model/UserMoneyLog.php"
+          ]
+        },
+        {
+          "name": "内容管理",
+          "api_controllers": [
+            "app/api/controller/Agreement.php",
+            "app/api/controller/Banner.php"
+          ],
+          "models": [
+            "app/common/model/Agreement.php",
+            "app/common/model/Banner.php"
+          ]
+        }
+      ],
+      "coverage": "100%"
+    },
+    {
+      "name": "admin-frontend",
+      "path": "web",
+      "type": "vue",
+      "language": "TypeScript",
+      "framework": "Vue 3.5 + Vite 6.3",
+      "entry_points": [
+        "web/src/main.ts",
+        "web/index.html"
+      ],
+      "key_directories": [
+        "web/src/views",
+        "web/src/views/backend/ai",
+        "web/src/components",
+        "web/src/api",
+        "web/src/stores",
+        "web/src/router"
+      ],
+      "key_files": [
+        "web/src/views/backend/ai/template/index.vue",
+        "web/src/views/backend/ai/template/popupForm.vue",
+        "web/src/views/backend/ai/templateSub/index.vue",
+        "web/src/views/backend/ai/templateSub/popupForm.vue",
+        "web/src/views/backend/ai/style/index.vue",
+        "web/src/views/backend/ai/style/popupForm.vue",
+        "web/src/views/backend/ai/task/index.vue",
+        "web/src/views/backend/ai/task/detailDialog.vue"
+      ],
+      "has_tests": false,
+      "has_config": true,
+      "config_files": [
+        "web/package.json",
+        "web/tsconfig.json",
+        "web/vite.config.ts"
+      ],
+      "coverage": "95%"
+    },
+    {
+      "name": "user-frontend",
+      "path": "frontend",
+      "type": "uniapp",
+      "language": "JavaScript/Vue",
+      "framework": "UniApp + Vue 3",
+      "entry_points": [
+        "frontend/main.js",
+        "frontend/App.vue"
+      ],
+      "key_directories": [
+        "frontend/pages",
+        "frontend/pages/index",
+        "frontend/pages/template-detail",
+        "frontend/pages/generating",
+        "frontend/pages/preview",
+        "frontend/pages/history",
+        "frontend/pages/mine",
+        "frontend/pages/score",
+        "frontend/pages/agreement",
+        "frontend/components",
+        "frontend/utils",
+        "frontend/services",
+        "frontend/static"
+      ],
+      "key_files": [
+        "frontend/pages/index/index.vue",
+        "frontend/pages/template-detail/index.vue",
+        "frontend/pages/generating/index.vue",
+        "frontend/pages/preview/index.vue",
+        "frontend/pages/history/index.vue",
+        "frontend/pages/mine/index.vue",
+        "frontend/pages/login/index.vue",
+        "frontend/pages/upload/index.vue",
+        "frontend/pages/score/detail.vue",
+        "frontend/pages/score/recharge.vue",
+        "frontend/pages/agreement/index.vue",
+        "frontend/pages/banner-detail/index.vue",
+        "frontend/pages/profile/edit.vue"
+      ],
+      "has_tests": false,
+      "has_config": true,
+      "config_files": [
+        "frontend/manifest.json",
+        "frontend/pages.json"
+      ],
+      "coverage": "100%"
+    },
+    {
+      "name": "database",
+      "path": "database",
+      "type": "migrations",
+      "language": "PHP",
+      "framework": "Phinx",
+      "entry_points": [
+        "database/migrations/20230620180908_install.php"
+      ],
+      "key_directories": [
+        "database/migrations"
+      ],
+      "key_files": [
+        "database/migrations/20230620180908_install.php",
+        "database/migrations/20230620180916_install_data.php",
+        "database/migrations/20260203_create_ai_portrait_tables.php",
+        "database/migrations/20260204_add_prompt_to_ai_template_sub.php",
+        "database/migrations/20260205_add_ai_menu_permissions.php",
+        "database/migrations/20260205143000_add_task_fields.php",
+        "database/migrations/20260205150000_add_completetime_to_ai_task.php",
+        "database/migrations/20260205153000_add_mode_to_ai_task.php",
+        "database/migrations/20260206100000_create_score_system_tables.php",
+        "database/migrations/20260206_add_face_count_to_ai_template.php",
+        "database/migrations/20260206110000_add_score_menu_permissions.php",
+        "database/migrations/20260212_create_agreement_table.php"
+      ],
+      "latest_migration": "database/migrations/20260212_create_agreement_table.php",
+      "has_tests": false,
+      "has_config": false,
+      "coverage": "100%"
+    },
+    {
+      "name": "config",
+      "path": "config",
+      "type": "configuration",
+      "language": "PHP",
+      "framework": "ThinkPHP",
+      "entry_points": [
+        "config/app.php"
+      ],
+      "key_directories": [
+        "config"
+      ],
+      "key_files": [
+        "config/app.php",
+        "config/database.php",
+        "config/buildadmin.php",
+        "config/route.php",
+        "config/cache.php",
+        "config/upload.php"
+      ],
+      "has_tests": false,
+      "has_config": false,
+      "coverage": "100%"
+    }
+  ],
+  "ignored_patterns": [
+    "vendor/**",
+    "node_modules/**",
+    "web/node_modules/**",
+    "frontend/unpackage/**",
+    ".git/**",
+    "dist/**",
+    "build/**",
+    "runtime/**",
+    "public/assets/**",
+    "*.lock",
+    "*.log",
+    "*.bin",
+    "*.pdf",
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.mp4",
+    "*.zip",
+    "*.tar",
+    "*.gz"
+  ],
+  "ignored_statistics": {
+    "vendor": "~12000 files (Composer dependencies)",
+    "node_modules": "~0 files (managed by PNPM in web/)",
+    "unpackage": "~100 files (UniApp build output)",
+    "runtime": "~50 files (ThinkPHP runtime cache)"
+  },
+  "gaps": [
+    {
+      "type": "testing",
+      "description": "项目暂未包含自动化测试套件",
+      "recommendation": "建议添加 PHPUnit（后端）、Vitest（前端）、UniApp 自动化测试"
+    },
+    {
+      "type": "documentation",
+      "description": "API 文档未使用标准化工具生成",
+      "recommendation": "建议使用 Swagger/OpenAPI 生成 API 文档"
+    }
+  ],
+  "next_steps": [
+    "建议添加单元测试框架（PHPUnit、Vitest）",
+    "建议添加 E2E 测试（Playwright/Cypress）",
+    "建议完善 API 文档（Swagger/OpenAPI）",
+    "建议添加 CI/CD 流程配置"
+  ],
+  "notes": [
+    "项目已完成增量扫描更新（2026-02-13 20:49:36）",
+    "所有核心模块文档已更新",
+    "AI 写真业务模块已完整识别并记录",
+    "积分系统、用户系统、内容管理等业务模块已识别",
+    "数据库迁移文件已完整记录（最新：20260212_create_agreement_table.php）",
+    "前端小程序页面已完整扫描（13 个页面）",
+    "后台管理 AI 模块页面已完整记录（8 个页面）"
+  ]
+}

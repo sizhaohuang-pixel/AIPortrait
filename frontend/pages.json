@@ -1,0 +1,113 @@
+{
+	"pages": [
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "非鱼影像馆"
+			}
+		},
+		{
+			"path": "pages/login/index",
+			"style": {
+				"navigationBarTitleText": "登录",
+				"navigationBarBackgroundColor": "#FFFAF8"
+			}
+		},
+		{
+			"path": "pages/template-detail/index",
+			"style": {
+				"navigationBarTitleText": "模板详情"
+			}
+		},
+		{
+			"path": "pages/upload/index",
+			"style": {
+				"navigationBarTitleText": "上传照片"
+			}
+		},
+		{
+			"path": "pages/mine/index",
+			"style": {
+				"navigationBarTitleText": "我的"
+			}
+		},
+		{
+			"path": "pages/generating/index",
+			"style": {
+				"navigationBarTitleText": "生成中"
+			}
+		},
+		{
+			"path": "pages/preview/index",
+			"style": {
+				"navigationBarTitleText": "生成结果",
+				"navigationBarBackgroundColor": "#F8F8F8"
+			}
+		},
+		{
+			"path": "pages/history/index",
+			"style": {
+				"navigationBarTitleText": "历史记录"
+			}
+		},
+		{
+			"path": "pages/score/detail",
+			"style": {
+				"navigationBarTitleText": "积分明细",
+				"enablePullDownRefresh": true
+			}
+		},
+		{
+			"path": "pages/score/recharge",
+			"style": {
+				"navigationBarTitleText": "积分充值"
+			}
+		},
+		{
+			"path": "pages/agreement/index",
+			"style": {
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/banner-detail/index",
+			"style": {
+				"navigationBarTitleText": "详情"
+			}
+		},
+		{
+			"path": "pages/profile/edit",
+			"style": {
+				"navigationBarTitleText": "编辑资料",
+				"navigationBarBackgroundColor": "#FFFFFF"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "AI写真",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	},
+	"tabBar": {
+		"color": "#9a8f88",
+		"selectedColor": "#2b2521",
+		"backgroundColor": "#ffffff",
+		"borderStyle": "white",
+		"list": [
+			{
+				"pagePath": "pages/index/index",
+				"text": "首页",
+				"iconPath": "static/icons/home.png",
+				"selectedIconPath": "static/icons/home-active.png"
+			},
+			{
+				"pagePath": "pages/mine/index",
+				"text": "我的",
+				"iconPath": "static/icons/user.png",
+				"selectedIconPath": "static/icons/user-active.png"
+			}
+		]
+	},
+	"uniIdRouter": {}
+}
