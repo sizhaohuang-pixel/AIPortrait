@@ -33,10 +33,10 @@
                         <el-progress :percentage="baTable.form.items.progress" :status="baTable.form.items.status === 1 ? 'success' : (baTable.form.items.status === 2 ? 'exception' : '')" />
                     </el-descriptions-item>
                     <el-descriptions-item label="创建时间" :span="2">
-                        {{ formatDateTime(baTable.form.items.createtime) }}
+                        {{ formatDateTime(baTable.form.items.create_time) }}
                     </el-descriptions-item>
                     <el-descriptions-item label="完成时间" :span="2">
-                        {{ baTable.form.items.completetime ? formatDateTime(baTable.form.items.completetime) : '-' }}
+                        {{ baTable.form.items.complete_time ? formatDateTime(baTable.form.items.complete_time) : '-' }}
                     </el-descriptions-item>
                     <el-descriptions-item label="错误信息" :span="2" v-if="baTable.form.items.error_msg">
                         <el-text type="danger">{{ baTable.form.items.error_msg }}</el-text>

@@ -477,12 +477,12 @@ class TaskProcessor
             // 艹，平滑过渡到100%，不要直接跳跃
             $task->progress = ($task->progress < 95) ? 95 : 100;
             // 艹，记录任务完成时间
-            $task->completetime = time();
+            $task->complete_time = time();
         } else {
             $task->status = 2;
             $task->error_msg = '所有子任务都失败了';
             // 艹，失败的任务也记录完成时间
-            $task->completetime = time();
+            $task->complete_time = time();
         }
     }
 

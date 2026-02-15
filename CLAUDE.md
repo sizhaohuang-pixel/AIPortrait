@@ -4,12 +4,20 @@
 4."每次我纠正你后,就在CLAUDE.md文件中添加一条规则,这样就不会再发生这种情况了."
 5.禁止未经同意编写测试脚本
 6.完成编码工作后都需要做出总结
+7.数据库字段命名规范：所有时间字段必须使用带下划线的蛇形命名法（如 create_time、update_time、complete_time），前后端代码必须保持一致，禁止使用驼峰命名（如 createtime、updatetime）
 
 # AIPortrait - AI 肖像管理系统
 
 > 基于 BuildAdmin 框架的现代化后台管理系统，采用前后端分离架构
 
 ## 变更记录 (Changelog)
+
+### 2026-02-13 23:30:00
+- 修复后台任务管理页面时间字段显示问题
+  - 统一时间字段命名为带下划线格式（create_time、update_time、complete_time）
+  - 修改前端任务列表页面字段名（web/src/views/backend/ai/task/index.vue）
+  - 修改前端任务详情页面字段名（web/src/views/backend/ai/task/detailDialog.vue）
+  - 新增数据库字段命名规范到项目规则（规则 7）
 
 ### 2026-02-13 20:49:36
 - 增量更新项目 AI 上下文索引文档

@@ -85,8 +85,8 @@ const baTable = new baTableClass(
             },
             { label: '进度', prop: 'progress', align: 'center', operator: 'RANGE', width: 100, render: 'slot', slotName: 'progress', sortable: false },
             { label: '失败原因', prop: 'error_msg', align: 'center', 'show-overflow-tooltip': true, operator: 'LIKE', operatorPlaceholder: '模糊查询' },
-            { label: '创建时间', prop: 'createtime', align: 'center', render: 'datetime', sortable: 'custom', operator: 'RANGE', width: 160 },
-            { label: '更新时间', prop: 'updatetime', align: 'center', render: 'datetime', sortable: 'custom', operator: 'RANGE', width: 160 },
+            { label: '创建时间', prop: 'create_time', align: 'center', render: 'datetime', sortable: 'custom', operator: 'RANGE', width: 160 },
+            { label: '更新时间', prop: 'update_time', align: 'center', render: 'datetime', sortable: 'custom', operator: 'RANGE', width: 160 },
             {
                 label: '操作',
                 align: 'center',
