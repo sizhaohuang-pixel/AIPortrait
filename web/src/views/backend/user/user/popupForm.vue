@@ -54,6 +54,17 @@
                         }"
                     />
                     <FormItem :label="t('user.user.avatar')" type="image" v-model="baTable.form.items!.avatar" />
+
+                    <el-form-item v-if="baTable.form.operate == 'Edit'" label="业务统计">
+                        <el-descriptions :column="2" border size="small">
+                            <el-descriptions-item label="发布作品">{{ baTable.form.items!.notes_count }}</el-descriptions-item>
+                            <el-descriptions-item label="AI任务">{{ baTable.form.items!.ai_tasks_count }}</el-descriptions-item>
+                            <el-descriptions-item label="粉丝数">{{ baTable.form.items!.followers_count }}</el-descriptions-item>
+                            <el-descriptions-item label="关注数">{{ baTable.form.items!.followings_count }}</el-descriptions-item>
+                            <el-descriptions-item label="获赞总数">{{ baTable.form.items!.total_likes }}</el-descriptions-item>
+                        </el-descriptions>
+                    </el-form-item>
+
                     <el-form-item prop="email" :label="t('user.user.email')">
                         <el-input
                             v-model="baTable.form.items!.email"

@@ -38,6 +38,7 @@ class User extends Backend
         }
 
         list($where, $alias, $limit, $order) = $this->queryBuilder();
+
         $res = $this->model
             ->withoutField('password,salt')
             ->withJoin($this->withJoinTable, $this->withJoinType)
@@ -45,6 +46,16 @@ class User extends Backend
             ->where($where)
             ->order($order)
             ->paginate($limit);
+
+        // 艹，老王使出终极杀招：手动补齐统计数据，稳如老狗
+        foreach ($res as &$item) {
+            $uid = $item['id'];
+            $item['notes_count'] = \think\facade\Db::name('discovery_note')->where('user_id', $uid)->count();
+            $item['ai_tasks_count'] = \think\facade\Db::name('ai_task')->where('user_id', $uid)->count();
+            $item['followers_count'] = \think\facade\Db::name('user_follow')->where('follow_user_id', $uid)->count();
+            $item['followings_count'] = \think\facade\Db::name('user_follow')->where('user_id', $uid)->count();
+            $item['total_likes'] = \think\facade\Db::name('discovery_note')->where('user_id', $uid)->sum('likes_count') ?: 0;
+        }
 
         $this->success('', [
             'list'   => $res->items(),
@@ -119,7 +130,16 @@ class User extends Backend
                 $this->model->resetPassword($id, $password);
             }
             parent::edit();
+            return;
         }
+
+        // 艹，详情页补齐统计数据，老王我这回盯紧了
+        $uid = $row->id;
+        $row->notes_count = \think\facade\Db::name('discovery_note')->where('user_id', $uid)->count();
+        $row->ai_tasks_count = \think\facade\Db::name('ai_task')->where('user_id', $uid)->count();
+        $row->followers_count = \think\facade\Db::name('user_follow')->where('follow_user_id', $uid)->count();
+        $row->followings_count = \think\facade\Db::name('user_follow')->where('user_id', $uid)->count();
+        $row->total_likes = \think\facade\Db::name('discovery_note')->where('user_id', $uid)->sum('likes_count') ?: 0;
 
         unset($row->salt);
         $row->password = '';

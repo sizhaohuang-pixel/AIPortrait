@@ -17,6 +17,14 @@ class User extends Frontend
     public function initialize(): void
     {
         parent::initialize();
+
+        // 艹，终极修复：在初始化里直接加载限流，针对特定方法
+        if (in_array($this->request->action(), ['checkIn', 'mobileLogin', 'wechatLogin'])) {
+            $this->app->middleware->add([\think\middleware\Throttle::class, [
+                'visit_rate' => '5/m',
+                'key'        => '__CONTROLLER__/__ACTION__/__IP__',
+            ]]);
+        }
     }
 
     /**
@@ -266,5 +274,175 @@ class User extends Frontend
         }
 
         $this->error(__('请求方式错误'));
+    }
+
+    /**
+     * 获取用户信息及社交统计
+     * GET /api/user/info
+     */
+    public function info(): void
+    {
+        if (!$this->auth->isLogin()) {
+            $this->error(__('Please login first'), [], 401);
+        }
+
+        $userId = $this->auth->id;
+
+        // 统计获赞数：该用户发布的笔记被点赞的总数
+        $receivedLikes = \app\common\model\DiscoveryNote::where('user_id', $userId)
+            ->sum('likes_count');
+
+        // 统计获收藏数：该用户发布的笔记被收藏的总数
+        $receivedCollections = \app\common\model\DiscoveryNote::where('user_id', $userId)
+            ->sum('collections_count');
+
+        // 统计粉丝数
+        $fansCount = \app\common\model\UserFollow::where('follow_user_id', $userId)->count();
+
+        // 统计关注数
+        $followCount = \app\common\model\UserFollow::where('user_id', $userId)->count();
+
+        $this->success('', [
+            'userInfo' => $this->auth->getUserInfo(),
+            'stats' => [
+                'received_likes' => intval($receivedLikes),
+                'received_collections' => intval($receivedCollections),
+                'fans_count' => intval($fansCount),
+                'follow_count' => intval($followCount)
+            ]
+        ]);
+    }
+
+    /**
+     * 获取我点赞过的笔记
+     * GET /api/user/likes
+     */
+    public function likes(): void
+    {
+        $page = $this->request->get('page/d', 1);
+        $limit = $this->request->get('limit/d', 10);
+        $userId = $this->auth->id;
+
+        $list = \app\common\model\DiscoveryLike::with(['note' => function($query) {
+            $query->with(['user' => function($q) {
+                $q->field('id,nickname,avatar');
+            }]);
+        }])->where('user_id', $userId)
+           ->order('create_time', 'desc')
+           ->page($page, $limit)
+           ->select()
+           ->toArray();
+
+        foreach ($list as &$item) {
+            if (isset($item['note'])) {
+                $item['note']['image_url'] = $this->convertImageUrl($item['note']['image_url']);
+                if (isset($item['note']['user']['avatar'])) {
+                    $item['note']['user']['avatar'] = $this->convertImageUrl($item['note']['user']['avatar']);
+                }
+            }
+        }
+
+        $this->success('', ['list' => $list]);
+    }
+
+    /**
+     * 获取我收藏的笔记
+     * GET /api/user/collections
+     */
+    public function collections(): void
+    {
+        $page = $this->request->get('page/d', 1);
+        $limit = $this->request->get('limit/d', 10);
+        $userId = $this->auth->id;
+
+        $list = \app\common\model\DiscoveryCollection::with(['note' => function($query) {
+            $query->with(['user' => function($q) {
+                $q->field('id,nickname,avatar');
+            }]);
+        }])->where('user_id', $userId)
+           ->order('create_time', 'desc')
+           ->page($page, $limit)
+           ->select()
+           ->toArray();
+
+        foreach ($list as &$item) {
+            if (isset($item['note'])) {
+                $item['note']['image_url'] = $this->convertImageUrl($item['note']['image_url']);
+                if (isset($item['note']['user']['avatar'])) {
+                    $item['note']['user']['avatar'] = $this->convertImageUrl($item['note']['user']['avatar']);
+                }
+            }
+        }
+
+        $this->success('', ['list' => $list]);
+    }
+
+    /**
+     * 获取我的粉丝列表
+     * GET /api/user/fans
+     */
+    public function fans(): void
+    {
+        $page = $this->request->get('page/d', 1);
+        $limit = $this->request->get('limit/d', 20);
+        $userId = $this->auth->id;
+
+        $list = \app\common\model\UserFollow::with(['user' => function($query) {
+            $query->field('id,nickname,avatar'); // 艹，安全优化：严禁泄露他人手机号
+        }])->where('follow_user_id', $userId)
+           ->order('create_time', 'desc')
+           ->page($page, $limit)
+           ->select()
+           ->toArray();
+
+        foreach ($list as &$item) {
+            if (isset($item['user']['avatar'])) {
+                $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar']);
+            }
+        }
+
+        $this->success('', ['list' => $list]);
+    }
+
+    /**
+     * 获取我的关注列表
+     * GET /api/user/follows
+     */
+    public function follows(): void
+    {
+        $page = $this->request->get('page/d', 1);
+        $limit = $this->request->get('limit/d', 20);
+        $userId = $this->auth->id;
+
+        $list = \app\common\model\UserFollow::with(['followUser' => function($query) {
+            $query->field('id,nickname,avatar'); // 艹，安全优化：严禁泄露他人手机号
+        }])->where('user_id', $userId)
+           ->order('create_time', 'desc')
+           ->page($page, $limit)
+           ->select()
+           ->toArray();
+
+        foreach ($list as &$item) {
+            if (isset($item['followUser']['avatar'])) {
+                $item['followUser']['avatar'] = $this->convertImageUrl($item['followUser']['avatar']);
+            }
+        }
+
+        $this->success('', ['list' => $list]);
+    }
+
+    /**
+     * 转换图片URL为完整路径
+     */
+    private function convertImageUrl($url)
+    {
+        if (empty($url)) return '';
+        if (str_starts_with($url, 'http')) return $url;
+
+        $domainWithProtocol = $this->request->domain();
+        if (!str_starts_with($domainWithProtocol, 'http')) {
+            $domainWithProtocol = 'https://' . ltrim($domainWithProtocol, '/');
+        }
+        return rtrim($domainWithProtocol, '/') . '/' . ltrim($url, '/');
     }
 }

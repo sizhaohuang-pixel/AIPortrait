@@ -71,9 +71,22 @@ class Config extends Backend
                     $this->error('积分有效期必须是大于等于0的数字');
                 }
 
-                // 艹，更新配置
+                // 艹，验证倍率配置（如果有提供）
+                if (isset($data['mode1_rate']) && $data['mode1_rate'] !== '') {
+                    if (!is_numeric($data['mode1_rate']) || $data['mode1_rate'] <= 0) {
+                        $this->error('梦幻模式倍率必须是大于0的数字');
+                    }
+                }
+                if (isset($data['mode2_rate']) && $data['mode2_rate'] !== '') {
+                    if (!is_numeric($data['mode2_rate']) || $data['mode2_rate'] <= 0) {
+                        $this->error('专业模式倍率必须是大于0的数字');
+                    }
+                }
+
+                // 艹，保存所有配置（包括必填项和倍率项）
+                $allKeys = array_merge($requiredKeys, ['mode1_rate', 'mode2_rate']);
                 foreach ($data as $key => $value) {
-                    if (in_array($key, $requiredKeys)) {
+                    if (in_array($key, $allKeys)) {
                         $result = ScoreConfig::setConfigValue($key, $value);
                         if (!$result) {
                             $this->error("保存配置项 {$key} 失败");

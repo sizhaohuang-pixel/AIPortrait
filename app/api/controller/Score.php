@@ -7,6 +7,7 @@ use app\common\library\ScoreService;
 use app\common\model\UserScoreLog;
 use app\common\model\ScoreRechargePackage;
 use app\common\model\ScoreRechargeOrder;
+use app\common\model\ScoreConfig;
 use think\facade\Db;
 use Exception;
 
@@ -17,10 +18,10 @@ use Exception;
 class Score extends Frontend
 {
     // 艹，这些方法都需要登录才能访问
-    protected array $noNeedLogin = [];
+    protected array $noNeedLogin = ['config'];
 
-    // 艹，这些方法不需要权限验证
-    protected array $noNeedPermission = ['info', 'log', 'packages', 'createOrder', 'mockPay', 'consume'];
+    // 艹，这些方法不需要权限验证（已移除 mockPay，安全第一！）
+    protected array $noNeedPermission = ['info', 'log', 'packages', 'createOrder', 'consume', 'config'];
 
     /**
      * 获取积分信息
@@ -36,7 +37,7 @@ class Score extends Frontend
 
     /**
      * 获取积分明细
-     * 艹，返回用户的积分变动记录
+     * 艹，老王魔改版：强行合并预占和结算日志，让用户看着舒心
      */
     public function log(): void
     {
@@ -44,30 +45,102 @@ class Score extends Frontend
         $page = $this->request->param('page', 1);
         $limit = $this->request->param('limit', 10);
 
-        // 艹，查询积分日志
-        $list = UserScoreLog::where('user_id', $userId)
-            ->order('create_time', 'desc')
-            ->page($page, $limit)
-            ->select();
+        // 艹，先查出原始数据（为了保证合并后的数量，这里稍微多查点，或者直接在内存处理分页）
+        $rawList = UserScoreLog::where('user_id', $userId)
+            ->order('id', 'desc')
+            ->limit(200)
+            ->select()
+            ->toArray();
 
-        $total = UserScoreLog::where('user_id', $userId)->count();
+        $mergedList = [];
+        $taskMap = [];
+
+        foreach ($rawList as $item) {
+            $memo = $item['memo'];
+            $taskId = 0;
+
+            if (preg_match('/\[task_(?:reserve|settle):(\d+)\]/', $memo, $matches)) {
+                $taskId = intval($matches[1]);
+            }
+
+            if ($taskId > 0) {
+                if (!isset($taskMap[$taskId])) {
+                    $taskMap[$taskId] = [
+                        'id' => $item['id'],
+                        'user_id' => $item['user_id'],
+                        'score' => floatval($item['score']),
+                        'after' => floatval($item['after']),
+                        'create_time' => $item['create_time'],
+                        'is_settled' => str_contains($memo, 'settle'),
+                        'raw_memo' => $memo,
+                    ];
+                } else {
+                    $taskMap[$taskId]['score'] += floatval($item['score']);
+                }
+            } else {
+                $mergedList[] = [
+                    'id' => $item['id'],
+                    'user_id' => $item['user_id'],
+                    'score' => floatval($item['score']),
+                    'after' => floatval($item['after']),
+                    'memo' => $this->cleanMemo($memo),
+                    'create_time' => $item['create_time'],
+                ];
+            }
+        }
+
+        foreach ($taskMap as $taskId => $data) {
+            $cleanMemo = $this->cleanMemo($data['raw_memo']);
+
+            $mergedList[] = [
+                'id' => $data['id'],
+                'user_id' => $data['user_id'],
+                'score' => $data['score'],
+                'after' => $data['after'],
+                'memo' => trim($cleanMemo),
+                'create_time' => $data['create_time'],
+            ];
+        }
+
+        usort($mergedList, function($a, $b) {
+            return $b['create_time'] <=> $a['create_time'];
+        });
+
+        $total = count($mergedList);
+        $offset = ($page - 1) * $limit;
+        $pagedList = array_slice($mergedList, $offset, $limit);
 
         $this->success('获取成功', [
-            'list' => $list,
+            'list' => $pagedList,
             'total' => $total,
         ]);
     }
 
     /**
+     * 内部方法：清理 memo 里的脏东西
+     */
+    private function cleanMemo($memo)
+    {
+        $memo = preg_replace('/\[.*?\]/', '', $memo);
+        $replaceMap = [
+            '预扣积分' => '',
+            '结算完成' => '',
+            '返还积分' => '-多退少补',
+            '补扣积分' => '-多退少补',
+            '生成完成' => '',
+        ];
+        $memo = strtr($memo, $replaceMap);
+        $memo = str_replace(['（锁定）', '（生成成功）', '（预扣费）', '（结算）'], '', $memo);
+        return trim($memo);
+    }
+
+    /**
      * 获取充值档位
-     * 艹，返回所有启用的充值档位列表，过滤掉已充值的"体验档"档位
      */
     public function packages(): void
     {
         $userId = $this->auth->id;
         $list = ScoreRechargePackage::getEnabledPackages($userId);
-
-        // 艹，转换为数组并重新索引
         $list = array_values($list->toArray());
 
         $this->success('获取成功', [
@@ -77,7 +150,6 @@ class Score extends Frontend
 
     /**
      * 创建充值订单
-     * 艹，创建一个新的充值订单
      */
     public function createOrder(): void
     {
@@ -88,20 +160,17 @@ class Score extends Frontend
             $this->error('请选择充值档位');
         }
 
-        // 艹，获取充值档位信息
         $package = ScoreRechargePackage::getPackageById($packageId);
         if (!$package) {
             $this->error('充值档位不存在或已禁用');
         }
 
-        // 艹，如果是"体验档"档位，检查用户是否已充值过
         if (stripos($package['name'], '体验档') !== false) {
             if (ScoreRechargePackage::hasUserRecharged($userId, $packageId)) {
                 $this->error('该档位仅限首次充值，您已充值过此档位');
             }
         }
 
-        // 艹，创建充值订单
         $order = ScoreRechargeOrder::createOrder(
             $userId,
             $packageId,
@@ -119,65 +188,6 @@ class Score extends Frontend
     }
 
     /**
-     * 模拟支付
-     * 艹，开发期间的模拟支付接口，直接标记订单为已支付
-     */
-    public function mockPay(): void
-    {
-        $userId = $this->auth->id;
-        $orderNo = $this->request->param('order_no');
-
-        if (!$orderNo) {
-            $this->error('订单号不能为空');
-        }
-
-        // 艹，获取订单信息
-        $order = ScoreRechargeOrder::getOrderByNo($orderNo);
-        if (!$order) {
-            $this->error('订单不存在');
-        }
-
-        // 艹，检查订单是否属于当前用户
-        if ($order->user_id != $userId) {
-            $this->error('无权操作此订单');
-        }
-
-        // 艹，检查订单状态
-        if ($order->pay_status == ScoreRechargeOrder::PAY_STATUS_PAID) {
-            $this->error('订单已支付，请勿重复支付');
-        }
-
-        if ($order->pay_status == ScoreRechargeOrder::PAY_STATUS_CANCELLED) {
-            $this->error('订单已取消');
-        }
-
-        // 艹，使用事务处理支付逻辑
-        Db::startTrans();
-        try {
-            // 艹，标记订单为已支付
-            $order->markAsPaid();
-
-            // 艹，给用户增加积分
-            $totalScore = $order->score + $order->bonus_score;
-            ScoreService::addScore(
-                $userId,
-                $totalScore,
-                "充值订单：{$orderNo}，充值{$order->score}积分，赠送{$order->bonus_score}积分"
-            );
-
-            Db::commit();
-
-            $this->success('支付成功', [
-                'success' => true,
-                'score' => $totalScore,
-            ]);
-        } catch (Exception $e) {
-            Db::rollback();
-            throw $e;
-        }
-    }
-
-    /**
      * 积分消耗（生成写真时调用）
      * 艹，扣除用户积分
      */
@@ -190,7 +200,6 @@ class Score extends Frontend
             $this->error('生成数量必须大于0');
         }
 
-        // 艹，检查积分是否足够
         $checkResult = ScoreService::checkScoreEnough($userId, $count);
         if (!$checkResult['enough']) {
             $this->error('积分不足', [
@@ -200,21 +209,43 @@ class Score extends Frontend
             ]);
         }
 
-        // 艹，消耗积分
         $needScore = $checkResult['need'];
         ScoreService::consumeScore(
             $userId,
             $needScore,
-            "生成{$count}张AI写真"
+            "生成AI写真 {$count}张"
         );
 
-        // 艹，获取剩余积分
         $scoreInfo = ScoreService::getUserScore($userId);
 
         $this->success('积分扣除成功', [
             'success' => true,
             'consumed' => $needScore,
             'balance' => $scoreInfo['score'],
+        ]);
+    }
+
+    /**
+     * 获取积分配置（公开接口）
+     * 艹，返回生成写真的积分消耗配置，供前端展示
+     */
+    public function config(): void
+    {
+        $generateCost = intval(ScoreConfig::getConfigValue('generate_cost', 10));
+        $mode1Rate = floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
+        $mode2Rate = floatval(ScoreConfig::getConfigValue('mode2_rate', 2));
+
+        $imageCount = 4;
+        $mode1Cost = intval($generateCost * $imageCount * $mode1Rate);
+        $mode2Cost = intval($generateCost * $imageCount * $mode2Rate);
+
+        $this->success('获取成功', [
+            'generate_cost' => $generateCost,
+            'image_count' => $imageCount,
+            'mode1_rate' => $mode1Rate,
+            'mode2_rate' => $mode2Rate,
+            'mode1_cost' => $mode1Cost,
+            'mode2_cost' => $mode2Cost,
         ]);
     }
 }

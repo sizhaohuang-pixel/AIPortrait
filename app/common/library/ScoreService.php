@@ -88,7 +88,7 @@ class ScoreService
                 'score' => $score,
                 'before' => $beforeScore,
                 'after' => $user->score,
-                'memo' => $memo ?: '积分充值',
+                'memo' => $memo ?: '充值积分',
             ]);
 
             Db::commit();
@@ -143,7 +143,7 @@ class ScoreService
                 'score' => -$score,
                 'before' => $beforeScore,
                 'after' => $user->score,
-                'memo' => $memo ?: '积分消耗',
+                'memo' => $memo ?: '积分消费',
             ]);
 
             Db::commit();
@@ -192,7 +192,7 @@ class ScoreService
                         'score' => -$beforeScore,
                         'before' => $beforeScore,
                         'after' => 0,
-                        'memo' => '积分过期自动清零',
+                        'memo' => '积分已过期',
                     ]);
                 }
 

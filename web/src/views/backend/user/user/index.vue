@@ -10,7 +10,36 @@
 
         <!-- 表格 -->
         <!-- 要使用`el-table`组件原有的属性，直接加在Table标签上即可 -->
-        <Table />
+        <Table ref="tableRef">
+            <template #stats_notes>
+                <el-table-column label="作品/任务" align="center" width="120">
+                    <template #default="scope">
+                        <div class="stats-cell">
+                            <el-tooltip content="作品数" placement="top">
+                                <el-tag size="small">{{ scope.row.notes_count }}</el-tag>
+                            </el-tooltip>
+                            <el-tooltip content="AI任务数" placement="top">
+                                <el-tag size="small" type="success" style="margin-top: 4px">{{ scope.row.ai_tasks_count }}</el-tag>
+                            </el-tooltip>
+                        </div>
+                    </template>
+                </el-table-column>
+            </template>
+            <template #stats_follows>
+                <el-table-column label="粉丝/关注" align="center" width="120">
+                    <template #default="scope">
+                        <div class="stats-cell">
+                            <el-tooltip content="粉丝数" placement="top">
+                                <el-tag size="small" type="warning">{{ scope.row.followers_count }}</el-tag>
+                            </el-tooltip>
+                            <el-tooltip content="关注数" placement="top">
+                                <el-tag size="small" type="info" style="margin-top: 4px">{{ scope.row.followings_count }}</el-tag>
+                            </el-tooltip>
+                        </div>
+                    </template>
+                </el-table-column>
+            </template>
+        </Table>
 
         <!-- 表单 -->
         <PopupForm />
@@ -39,7 +68,33 @@ const baTable = new baTableClass(
             { type: 'selection', align: 'center', operator: false },
             { label: t('Id'), prop: 'id', align: 'center', operator: '=', operatorPlaceholder: t('Id'), width: 70 },
             { label: t('user.user.User name'), prop: 'username', align: 'center', operator: 'LIKE', operatorPlaceholder: t('Fuzzy query') },
-            { label: t('user.user.nickname'), prop: 'nickname', align: 'center', operator: 'LIKE', operatorPlaceholder: t('Fuzzy query') },
+            { label: t('user.user.nickname'), prop: 'nickname', align: 'center', operator: 'LIKE', operatorPlaceholder: t('Fuzzy query'), width: 120 },
+            {
+                label: '作品/任务',
+                align: 'center',
+                width: 120,
+                render: 'slot',
+                slotName: 'stats_notes',
+                operator: false,
+            },
+            {
+                label: '粉丝/关注',
+                align: 'center',
+                width: 120,
+                render: 'slot',
+                slotName: 'stats_follows',
+                operator: false,
+            },
+            {
+                label: '获赞',
+                prop: 'total_likes',
+                align: 'center',
+                width: 80,
+                operator: 'RANGE',
+                sortable: 'custom',
+                render: 'tag',
+                custom: { '0': 'info' },
+            },
             {
                 label: t('user.user.group'),
                 prop: 'userGroup.name',
@@ -111,4 +166,12 @@ baTable.getData()
 provide('baTable', baTable)
 </script>
 
-<style scoped lang="scss"></style>
+<style scoped lang="scss">
+.stats-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+}
+</style>

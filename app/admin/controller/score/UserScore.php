@@ -81,9 +81,9 @@ class UserScore extends Backend
 
             // 艹，执行积分调整
             if ($type === 'add') {
-                ScoreService::addScore($userId, $score, $memo ?: '管理员手动增加积分');
+                ScoreService::addScore($userId, $score, $memo ?: '积分调整');
             } else {
-                ScoreService::consumeScore($userId, $score, $memo ?: '管理员手动扣除积分');
+                ScoreService::consumeScore($userId, $score, $memo ?: '积分调整');
             }
 
             $this->success('操作成功');

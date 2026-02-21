@@ -40,6 +40,38 @@ class User extends Model
     }
 
     /**
+     * 关联发现笔记
+     */
+    public function notes()
+    {
+        return $this->hasMany(\app\common\model\DiscoveryNote::class, 'user_id');
+    }
+
+    /**
+     * 关联 AI 任务
+     */
+    public function aiTasks()
+    {
+        return $this->hasMany(\app\common\model\AiTask::class, 'user_id');
+    }
+
+    /**
+     * 关联粉丝
+     */
+    public function followers()
+    {
+        return $this->hasMany(\app\common\model\UserFollow::class, 'follow_user_id');
+    }
+
+    /**
+     * 关联关注
+     */
+    public function followings()
+    {
+        return $this->hasMany(\app\common\model\UserFollow::class, 'user_id');
+    }
+
+    /**
      * 重置用户密码
      * @param int|string $uid         用户ID
      * @param string     $newPassword 新密码

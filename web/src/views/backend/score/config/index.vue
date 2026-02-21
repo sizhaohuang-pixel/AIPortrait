@@ -48,6 +48,30 @@
                     <div class="form-item-tip">积分有效期（天数），0表示永久有效</div>
                 </el-form-item>
 
+                <el-divider>生成模式倍率配置</el-divider>
+
+                <el-form-item label="梦幻模式倍率" prop="mode1_rate">
+                    <el-input-number
+                        v-model="state.form.mode1_rate"
+                        :min="0.1"
+                        :max="10"
+                        :step="0.1"
+                        controls-position="right"
+                    />
+                    <div class="form-item-tip">梦幻模式积分倍率（基础消耗 × 倍率）</div>
+                </el-form-item>
+
+                <el-form-item label="专业模式倍率" prop="mode2_rate">
+                    <el-input-number
+                        v-model="state.form.mode2_rate"
+                        :min="0.1"
+                        :max="10"
+                        :step="0.1"
+                        controls-position="right"
+                    />
+                    <div class="form-item-tip">专业模式积分倍率（基础消耗 × 倍率）</div>
+                </el-form-item>
+
                 <el-form-item>
                     <el-button type="primary" @click="onSubmit" :loading="state.submitting">保存配置</el-button>
                     <el-button @click="onReset">重置</el-button>
@@ -75,6 +99,8 @@ const state = reactive({
         recharge_ratio: 10,
         generate_cost: 10,
         score_expire_days: 0,
+        mode1_rate: 1,
+        mode2_rate: 2,
     },
     originalForm: {} as any,
     rules: {
@@ -98,6 +124,8 @@ const getConfig = async () => {
             state.form.recharge_ratio = parseInt(configs.recharge_ratio?.value || '10')
             state.form.generate_cost = parseInt(configs.generate_cost?.value || '10')
             state.form.score_expire_days = parseInt(configs.score_expire_days?.value || '0')
+            state.form.mode1_rate = parseFloat(configs.mode1_rate?.value || '1')
+            state.form.mode2_rate = parseFloat(configs.mode2_rate?.value || '2')
 
             // 艹，保存原始数据用于重置
             state.originalForm = { ...state.form }
