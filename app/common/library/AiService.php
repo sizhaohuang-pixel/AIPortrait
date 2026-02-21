@@ -494,12 +494,14 @@ class AiService
         }
 
         // 艹，根据模式选择API地址和构建请求数据
+        // mode=1: seedream-v4.5（梦幻模式/专业模式的第一步）
+        // mode=2: rhart-image-n-pro（专业模式的第二步）
         if ($mode == 2) {
-            // 艹，模式2：专业模式（rhart-image-n-pro）
-            // 艹，从系统配置中读取模式2的关键词
+            // 艹，第二步：rhart-image-n-pro
+            // 艹，从系统配置中读取 Mode2 的关键词，只用关键词不需要原始prompt
             $faceKeywords = get_sys_config('Mode2');
             if (!empty($faceKeywords)) {
-                $enhancedPrompt = $faceKeywords . ', ' . $prompt;
+                $enhancedPrompt = $faceKeywords;
             } else {
                 // 艹，如果配置为空，使用原始 prompt
                 $enhancedPrompt = $prompt;
@@ -513,8 +515,8 @@ class AiService
                 'resolution' => '4k',
             ];
         } else {
-            // 艹，模式1：梦幻模式（seedream-v4.5）
-            // 艹，从系统配置中读取模式1的关键词
+            // 艹，模式1/第一步：seedream-v4.5
+            // 艹，从系统配置中读取 Mode1 的关键词
             $faceKeywords = get_sys_config('Mode1');
             if (!empty($faceKeywords)) {
                 $enhancedPrompt = $faceKeywords . ', ' . $prompt;

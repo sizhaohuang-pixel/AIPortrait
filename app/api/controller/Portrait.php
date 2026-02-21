@@ -5,6 +5,7 @@ namespace app\api\controller;
 use think\facade\Db;
 use app\common\controller\Frontend;
 use app\common\library\ScoreService;
+use app\common\model\ScoreConfig;
 
 /**
  * AI写真控制器
@@ -15,12 +16,19 @@ class Portrait extends Frontend
     /**
      * 无需登录的方法
      */
-    protected array $noNeedLogin = ['styles', 'templates', 'template'];
+    protected array $noNeedLogin = ['styles', 'templates', 'template', 'share'];
 
     public function initialize(): void
     {
-        // 调用父类初始化，正确处理 noNeedLogin 配置
         parent::initialize();
+
+        // 艹，终极修复：专门针对上传接口加限流
+        if ($this->request->action() === 'uploadToRunningHub') {
+            $this->app->middleware->add([\think\middleware\Throttle::class, [
+                'visit_rate' => '10/m',
+                'key'        => '__CONTROLLER__/__ACTION__/__IP__',
+            ]]);
+        }
     }
 
     /**
@@ -33,13 +41,44 @@ class Portrait extends Frontend
             return '';
         }
 
-        // 如果已经是完整URL（http或https开头），直接返回
-        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+        // 艹，多解码几次，彻底把 &amp; 这种脏东西干掉
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // 艹，强制补全协议！原生预览组件对 // 这种协议相对路径支持极差
+        if (str_starts_with($url, '//')) {
+            $url = 'https:' . $url;
+        }
+
+        // 艹，强制全站 HTTPS！http 的图片在原生预览里经常转圈圈
+        if (str_starts_with($url, 'http://')) {
+            $url = 'https' . substr($url, 4);
+        }
+
+        // 艹，把 URL 里的空格、换行符全干掉，这些脏东西会让原生组件发疯
+        $url = trim($url);
+        $url = str_replace(["\r", "\n", "\t", " "], '', $url);
+
+        // 艹，如果已经是完整URL（https开头），直接返回
+        if (str_starts_with($url, 'https://')) {
             return $url;
         }
 
-        // 如果是相对路径，拼接域名
-        return $this->request->domain() . $url;
+        // 艹，再加一层保险，检查是否包含了当前域名
+        $domain = $this->request->host();
+        if (str_contains($url, $domain)) {
+            // 如果只有域名没协议，强制加 https
+            return 'https://' . ltrim($url, '/');
+        }
+
+        // 如果是纯相对路径，拼接域名（强制带协议）
+        $url = '/' . ltrim($url, '/');
+        $domainWithProtocol = $this->request->domain();
+        if (!str_starts_with($domainWithProtocol, 'http')) {
+            $domainWithProtocol = 'https://' . ltrim($domainWithProtocol, '/');
+        }
+
+        return rtrim($domainWithProtocol, '/') . $url;
     }
 
     /**
@@ -284,6 +323,10 @@ class Portrait extends Frontend
                 $this->error('请上传照片');
             }
 
+            if (!in_array($mode, [1, 2], true)) {
+                $this->error('生成模式参数错误');
+            }
+
             // 验证模板是否存在
             $template = Db::name('ai_template')
                 ->where('id', $templateId)
@@ -307,44 +350,95 @@ class Portrait extends Frontend
 
             // 艹，检查积分是否足够（生成4张图片）
             $imageCount = 4; // 艹，固定生成4张图片
-            $checkResult = ScoreService::checkScoreEnough($userId, $imageCount);
-            if (!$checkResult['enough']) {
-                $this->error('积分不足，当前积分：' . $checkResult['current'] . '，需要：' . $checkResult['need'], [
-                    'current' => $checkResult['current'],
-                    'need' => $checkResult['need'],
+            
+            // 艹，根据模式计算积分（使用 ScoreConfig 读取配置）
+            $baseCost = ScoreService::calculateGenerateCost($imageCount);
+            if ($mode == 2) {
+                // 艹，专业模式：需要经过 seedream + rhart-image-n-pro 两步
+                // 艹，读取积分配置的模式2倍率，如果没有配置则默认为2
+                $modeRate = floatval(ScoreConfig::getConfigValue('mode2_rate', 2));
+            } else {
+                // 艹，梦幻模式：只用 seedream-v4.5
+                // 艹，读取积分配置的模式1倍率，如果没有配置则默认为1
+                $modeRate = floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
+            }
+            
+            $needScore = $baseCost * $modeRate;
+            
+            // 艹，检查积分是否足够
+            $user = \app\common\model\User::find($userId);
+            $currentScore = $user ? ($user->score ?? 0) : 0;
+            
+            if ($currentScore < $needScore) {
+                $this->error('积分不足，当前积分：' . $currentScore . '，需要：' . $needScore, [
+                    'current' => $currentScore,
+                    'need' => $needScore,
                 ]);
             }
 
-            // 艹，扣除积分
+            // 艹，先做过期检查，再进入原子事务
+            ScoreService::checkExpire($userId);
+
+            Db::startTrans();
             try {
-                ScoreService::consumeScore(
-                    $userId,
-                    $checkResult['need'],
-                    "生成AI写真，模板ID：{$templateId}，子模板ID：{$subTemplateId}"
-                );
+                // 艹，创建任务，添加新字段
+                $taskData = [
+                    'user_id' => $userId,
+                    'share_code' => \ba\Random::build('alnum', 16), // 艹，生成分享码
+                    'template_id' => $templateId,
+                    'sub_template_id' => $subTemplateId,
+                    'mode' => $mode, // 艹，生成模式（1=梦幻，2=专业）
+                    'images' => json_encode($images), // 艹，字段名是 images
+                    'status' => 9, // 艹，预占中（预占成功后切到0，避免守护进程抢跑）
+                    'progress' => 1,
+                    'total_count' => 4, // 艹，总共生成4张图片
+                    'completed_count' => 0, // 艹，已完成0张
+                    'create_time' => time(),
+                    'update_time' => time(),
+                ];
+
+                $taskId = Db::name('ai_task')->insertGetId($taskData);
+                if (!$taskId) {
+                    throw new \Exception('创建任务失败');
+                }
+
+                // 艹，预占积分（与任务创建同事务）
+                $user = Db::name('user')->where('id', $userId)->lock(true)->find();
+                if (!$user) {
+                    throw new \Exception('用户不存在');
+                }
+
+                $beforeScore = floatval($user['score'] ?? 0);
+                if ($beforeScore < $needScore) {
+                    throw new \Exception('积分不足');
+                }
+
+                $afterScore = $beforeScore - $needScore;
+                Db::name('user')->where('id', $userId)->update([
+                    'score' => $afterScore,
+                ]);
+
+                $modeText = $mode == 2 ? '专业' : '梦幻';
+                Db::name('user_score_log')->insert([
+                    'user_id' => $userId,
+                    'score' => -$needScore,
+                    'before' => $beforeScore,
+                    'after' => $afterScore,
+                    'memo' => "生成AI写真-{$modeText}模式-4张 [task_reserve:{$taskId}]",
+                    'create_time' => time(),
+                ]);
+
+                // 艹，预占成功后切换为可处理状态
+                Db::name('ai_task')->where('id', $taskId)->update([
+                    'status' => 0,
+                    'progress' => 5,
+                    'update_time' => time(),
+                ]);
+
+                Db::commit();
             } catch (\Exception $e) {
-                $this->error('积分扣除失败：' . $e->getMessage());
-            }
-
-            // 艹，创建任务，添加新字段
-            $taskData = [
-                'user_id' => $userId,
-                'template_id' => $templateId,
-                'sub_template_id' => $subTemplateId,
-                'mode' => $mode, // 艹，生成模式（1=梦幻，2=专业）
-                'images' => json_encode($images), // 艹，字段名是 images
-                'status' => 0, // 生成中
-                'progress' => 5, // 艹，初始进度设为5%，让用户知道任务已创建
-                'total_count' => 4, // 艹，总共生成4张图片
-                'completed_count' => 0, // 艹，已完成0张
-                'create_time' => time(),
-                'update_time' => time(),
-            ];
-
-            $taskId = Db::name('ai_task')->insertGetId($taskData);
-
-            if (!$taskId) {
-                $this->error('创建任务失败');
+                Db::rollback();
+                $this->error('积分预占失败：' . $e->getMessage());
             }
 
             // 艹，任务创建成功，守护进程会自动处理，不需要手动调用
@@ -393,13 +487,8 @@ class Portrait extends Frontend
             // 如果任务已完成或失败，获取结果图片
             $results = [];
             if ($task['status'] == 1) {
-                // 艹，任务成功，返回成功的结果
-                $results = Db::name('ai_task_result')
-                    ->where('task_id', $taskId)
-                    ->where('status', 1) // 艹，只返回成功的结果
-                    ->order('sub_task_index', 'asc')
-                    ->select()
-                    ->toArray();
+                // 艹，任务成功：专业模式优先返回第二步结果，避免把第一步中间图也返回给前端
+                $results = $this->getVisibleTaskResults($task, true);
             } elseif ($task['status'] == 2) {
                 // 艹，任务失败，也要返回失败的子任务信息（包含错误原因）
                 $results = Db::name('ai_task_result')
@@ -464,7 +553,7 @@ class Portrait extends Frontend
                 ->leftJoin('ai_template tp', 't.template_id = tp.id')
                 ->leftJoin('ai_template_sub ts', 't.sub_template_id = ts.id')
                 ->where('t.user_id', $userId)
-                ->whereIn('t.status', [0, 1]) // 艹，显示生成中和已完成的任务
+                ->whereIn('t.status', [0, 1, 9]) // 艹，显示预占中、生成中和已完成的任务
                 ->field('t.*, tp.title as template_title, tp.cover_url as template_cover, ts.title as sub_template_title')
                 ->order('t.create_time', 'desc')
                 ->page($page, $limit)
@@ -473,11 +562,8 @@ class Portrait extends Frontend
 
             // 获取每个任务的结果图片
             foreach ($tasks as &$task) {
-                $results = Db::name('ai_task_result')
-                    ->where('task_id', $task['id'])
-                    ->order('sort', 'asc')
-                    ->select()
-                    ->toArray();
+                // 艹，历史里专业模式也按可见结果返回，避免展示第一步中间图
+                $results = $this->getVisibleTaskResults($task, false);
 
                 $task['results'] = $results;
                 $task['images'] = json_decode($task['images'], true);
@@ -489,7 +575,7 @@ class Portrait extends Frontend
             // 获取总数
             $total = Db::name('ai_task')
                 ->where('user_id', $userId)
-                ->whereIn('status', [0, 1]) // 艹，统计生成中和已完成的任务
+                ->whereIn('status', [0, 1, 9]) // 艹，统计预占中、生成中和已完成的任务
                 ->count();
 
             // 历史记录为空是正常情况，返回成功
@@ -531,6 +617,17 @@ class Portrait extends Frontend
             $file = $this->request->file('file');
             if (!$file) {
                 $this->error('请选择文件');
+            }
+
+            // 艹，安全优化：严格校验文件大小和类型
+            // 上限 10MB，只允许常见的图片格式
+            if ($file->getSize() > 10 * 1024 * 1024) {
+                $this->error('文件大小超过限制，上限 10MB');
+            }
+
+            $mime = $file->getOriginalMime();
+            if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'])) {
+                $this->error('仅支持 jpg/png/webp 格式图片');
             }
 
             // 艹，保存到临时目录
@@ -575,9 +672,116 @@ class Portrait extends Frontend
     }
 
     /**
+     * 获取对前端可见的任务结果
+     * 专业模式：仅返回第二步（5-8）结果，不回退第一步
+     */
+    private function getVisibleTaskResults(array $task, bool $successOnly = false): array
+    {
+        $query = Db::name('ai_task_result')
+            ->where('task_id', $task['id']);
+
+        if ($successOnly) {
+            $query->where('status', 1);
+        }
+
+        if (intval($task['mode'] ?? 1) === 2) {
+            $query->where('sub_task_index', '>=', 5)
+                ->where('sub_task_index', '<=', 8);
+        }
+
+        return $query->order('sub_task_index', 'asc')->select()->toArray();
+    }
+
+    /**
+     * 获取分享任务详情（公开访问）
+     * GET /api/portrait/share?code=xxxxxx
+     *
+     * 老王提示：这个接口不校验登录，专供分享页使用
+     */
+    public function share(): void
+    {
+        try {
+            $code = $this->request->get('code/s', '');
+
+            if (empty($code)) {
+                $this->error('参数错误');
+            }
+
+            // 获取任务信息，关联用户
+            $task = \app\common\model\AiTask::where('share_code', $code)
+                ->where('status', 1) // 艹，只能看已完成的
+                ->find();
+
+            if (!$task) {
+                $this->error('作品不存在或尚未完成');
+            }
+
+            // 获取可见的结果图片
+            $results = $this->getVisibleTaskResults($task->toArray(), true);
+
+            // 获取用户信息（脱敏）
+            $user = $task->user;
+            $owner = [
+                'nickname' => $user ? $user->nickname : '神秘用户',
+                'avatar'   => $user ? $this->convertImageUrl($user->avatar) : ''
+            ];
+
+            // 转换结果图片URL
+            $this->convertImageUrls($results);
+
+            $this->success('获取成功', [
+                'owner'   => $owner,
+                'results' => $results
+            ]);
+        } catch (\think\exception\HttpResponseException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            $this->error('获取失败：' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 删除单张结果图片
+     * POST /api/portrait/delete_result
+     * 老王提示：改用 POST 绕过该死的服务器 DELETE 限制
+     */
+    public function deleteResult(): void
+    {
+        try {
+            if (!$this->auth->isLogin()) {
+                $this->error('请先登录', [], 401);
+            }
+
+            $userId = $this->auth->id;
+            // 艹，不管是 POST 还是查询参数，通通给我拿来
+            $id = $this->request->param('id/d', 0);
+
+            if ($id <= 0) {
+                $this->error('参数错误');
+            }
+
+            // 验证并删除
+            $result = Db::name('ai_task_result')
+                ->where('id', $id)
+                ->where('user_id', $userId)
+                ->delete();
+
+            if (!$result) {
+                $this->error('删除失败，图片不存在或无权操作');
+            }
+
+            $this->success('删除成功');
+        } catch (\think\exception\HttpResponseException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            $this->error('删除异常：' . $e->getMessage());
+        }
+    }
+
+    /**
      * 删除历史记录
-     * DELETE /api/portrait/deleteHistory?id=18
-     * 老王提示：使用查询参数方式，前端调用时用 ?id=xx
+     * POST /api/portrait/delete_history
+     * 老王提示：改用 POST 绕过该死的服务器 DELETE 限制
      */
     public function deleteHistory(): void
     {
@@ -588,7 +792,8 @@ class Portrait extends Frontend
             }
 
             $userId = $this->auth->id;
-            $taskId = $this->request->param('id/d', 0); // 艹，改用param()支持DELETE请求
+            // 艹，不管是 POST 还是查询参数，通通给我拿来
+            $taskId = $this->request->param('id/d', 0);
 
             if ($taskId <= 0) {
                 $this->error('参数错误');
@@ -601,20 +806,21 @@ class Portrait extends Frontend
                 ->find();
 
             if (!$task) {
-                $this->error('任务不存在');
+                $this->error('任务不存在或无权操作');
             }
 
             // 开启事务
             Db::startTrans();
             try {
-                // 删除任务结果
+                // 删除任务结果（同样带上任务ID约束）
                 Db::name('ai_task_result')
                     ->where('task_id', $taskId)
                     ->delete();
 
-                // 删除任务
+                // 删除任务（必须带上用户ID，双重保险！）
                 Db::name('ai_task')
                     ->where('id', $taskId)
+                    ->where('user_id', $userId)
                     ->delete();
 
                 Db::commit();

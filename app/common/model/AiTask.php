@@ -55,7 +55,7 @@ class AiTask extends Model
      */
     public function getStatusTextAttr($value, $data): string
     {
-        $status = [0 => '生成中', 1 => '已完成', 2 => '失败'];
+        $status = [0 => '生成中', 1 => '已完成', 2 => '失败', 9 => '预占中'];
         return $status[$data['status']] ?? '';
     }
 }

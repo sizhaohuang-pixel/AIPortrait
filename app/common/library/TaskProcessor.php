@@ -5,6 +5,10 @@ namespace app\common\library;
 use app\common\model\AiTask;
 use app\common\model\AiTaskResult;
 use app\common\model\AiTemplateSub;
+use app\common\model\ScoreConfig;
+use app\common\model\User;
+use app\common\model\UserScoreLog;
+use think\facade\Db;
 use think\facade\Log;
 
 /**
@@ -113,14 +117,52 @@ class TaskProcessor
             // 艹，更新进度到15%（跳过上传阶段）
             $this->updateTaskField($task->id, ['progress' => 15]);
 
-            Log::info("TaskProcessor 开始生成4张图片", [
-                'task_id' => $taskId,
-                'prompt' => is_array($prompt) ? json_encode($prompt) : $prompt,  // 艹，检查是否是数组
-                'image_urls' => json_encode($publicImageUrls),
-            ]);
+            // 艹，判断生成模式
+            $mode = $task->mode;
+            
+            if ($mode == 2) {
+                // 艹，专业模式：先用 seedream 生成图片，再用 rhart-image-n-pro 生成
+                // 艹，修改为异步流程：只提交第一步，不等待结果
+                Log::info("TaskProcessor 专业模式两步流程开始（异步）", [
+                    'task_id' => $taskId,
+                ]);
 
-            // 艹，提交4个任务到API
-            $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls);
+                // 艹，第一步：只提交 seedream-v4.5 任务，不等待结果
+                // 专业模式第一步必须走 seedream（mode=1）
+                $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 1, 1);
+                
+                // 艹，检查第一步是否提交成功
+                if ($submittedCount == 0) {
+                    Log::error("TaskProcessor 第一步提交完全失败");
+                    $this->updateTaskError($task, '第一步（seedream）提交失败');
+                    return false;
+                }
+
+                // 艹，第一步已提交，立即返回，由 pollPendingTasks 轮询结果
+                Log::info("TaskProcessor 第一步已提交，等待轮询处理", [
+                    'task_id' => $taskId,
+                    'submitted_count' => $submittedCount,
+                ]);
+
+                // 艹，更新任务状态
+                $this->updateTaskField($task->id, [
+                    'status' => 0,
+                    'progress' => 20,
+                    'error_msg' => '第一步提交完成，等待处理',
+                ]);
+
+                return true;
+            } else {
+                // 艹，梦幻模式：直接用 seedream-v4.5 生成
+                Log::info("TaskProcessor 开始生成4张图片（梦幻模式）", [
+                    'task_id' => $taskId,
+                    'prompt' => is_array($prompt) ? json_encode($prompt) : $prompt,
+                    'image_urls' => json_encode($publicImageUrls),
+                ]);
+
+                // 艹，提交4个任务到API（step=1）
+                $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 1, $mode);
+            }
 
             // 艹，检查是否所有任务都提交失败了
             if ($submittedCount == 0) {
@@ -145,8 +187,14 @@ class TaskProcessor
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // 艹，更新任务状态为失败
+            // 艹，终极兜底逻辑：如果任务失败且没进入结算，强制返还预占积分，防止钱被吞了
             if (isset($task) && $task) {
+                try {
+                    // 标记为失败前，尝试执行一次结算（退回全额积分）
+                    $this->settleScore($task->user_id, $task->id, 0, $task->mode);
+                } catch (\Exception $se) {
+                    Log::error("TaskProcessor 异常退分失败", ['task_id' => $taskId, 'error' => $se->getMessage()]);
+                }
                 $this->updateTaskError($task, '处理异常: ' . $e->getMessage());
             }
 
@@ -315,7 +363,8 @@ class TaskProcessor
      */
     public function pollPendingTasks()
     {
-        // 艹，查询所有待处理的任务结果（status=0）
+        // 艹，性能优化：使用 with(['task']) 或预加载减少 N+1 查询
+        // 虽然 AiTaskResult 模型可能没定义关联，但我们可以手动收集 ID 批量查询
         $pendingResults = AiTaskResult::where('status', 0)
             ->whereNotNull('api_task_id')
             ->where('api_task_id', '<>', '')
@@ -325,6 +374,10 @@ class TaskProcessor
         if ($pendingResults->isEmpty()) {
             return;
         }
+
+        // 艹，预加载任务信息，避免在循环中一个一个查 AiTask::find($taskId)
+        $taskIds = $pendingResults->column('task_id');
+        $tasks = AiTask::whereIn('id', $taskIds)->select()->dictionary();
 
         Log::info("TaskProcessor 开始轮询待处理任务", [
             'count' => $pendingResults->count(),
@@ -343,6 +396,143 @@ class TaskProcessor
                     'error' => $e->getMessage(),
                 ]);
             }
+        }
+
+        // 艹，检测模式2的第一步是否全部完成，如果是则触发第二步
+        $this->checkAndTriggerStep2($updatedTaskIds);
+    }
+
+    /**
+     * 检测第一步是否全部完成，如果是则触发第二步
+     * 艹，异步流程：模式2的第一步完成后自动提交第二步
+     */
+    protected function checkAndTriggerStep2($taskIds)
+    {
+        if (empty($taskIds)) {
+            return;
+        }
+
+        // 艹，获取这些任务ID
+        $taskIds = array_keys($taskIds);
+
+        // 艹，查询这些任务中模式2且第一步未提交第二步的任务
+        $tasks = AiTask::whereIn('id', $taskIds)
+            ->where('mode', 2)
+            ->where('status', 0)
+            ->select();
+
+        foreach ($tasks as $task) {
+            // 艹，检查第一步是否全部完成（sub_task_index 1-4 全部 status != 0）
+            $step1Completed = $this->isStep1Completed($task->id);
+
+            if ($step1Completed) {
+                Log::info("TaskProcessor 检测到第一步完成，准备提交第二步", [
+                    'task_id' => $task->id,
+                ]);
+
+                // 艹，触发第二步
+                $this->triggerStep2($task);
+            }
+        }
+    }
+
+    /**
+     * 检查第一步是否全部完成
+     * 艹，sub_task_index 1-4 全部 status != 0 则表示第一步完成
+     */
+    protected function isStep1Completed($taskId)
+    {
+        // 艹，查询第一步（sub_task_index 1-4）的处理中任务数量
+        $pendingCount = AiTaskResult::where('task_id', $taskId)
+            ->where('sub_task_index', '>=', 1)
+            ->where('sub_task_index', '<=', 4)
+            ->where('status', 0)
+            ->count();
+
+        // 艹，如果还有待处理的任务，说明第一步还没完成
+        return $pendingCount == 0;
+    }
+
+    /**
+     * 触发第二步：收集第一步结果并提交第二步
+     * 艹，异步流程中关键的一步
+     */
+    protected function triggerStep2($task)
+    {
+        try {
+            // 艹，检查是否已经提交过第二步，避免重复提交
+            $step2Exists = AiTaskResult::where('task_id', $task->id)
+                ->where('sub_task_index', '>=', 5)
+                ->where('sub_task_index', '<=', 8)
+                ->count();
+            
+            if ($step2Exists > 0) {
+                Log::info("TaskProcessor 第二步已提交，跳过", [
+                    'task_id' => $task->id,
+                ]);
+                return;
+            }
+
+            Log::info("TaskProcessor 开始提交第二步", [
+                'task_id' => $task->id,
+            ]);
+
+            // 艹，获取第一步成功的图片URL（sub_task_index 1-4, status=1）
+            $step1Results = AiTaskResult::where('task_id', $task->id)
+                ->where('sub_task_index', '>=', 1)
+                ->where('sub_task_index', '<=', 4)
+                ->where('status', 1)
+                ->order('sub_task_index', 'asc')
+                ->column('result_url');
+
+            $successCount = count($step1Results);
+
+            // 艹，检查第一步是否有成功的图片
+            if ($successCount == 0) {
+                Log::error("TaskProcessor 第一步没有成功的图片，无法提交第二步", [
+                    'task_id' => $task->id,
+                ]);
+                $this->updateTaskError($task, '第一步没有成功的图片');
+                return;
+            }
+
+            // 艹，第二步按第一步成功张数提交，不做补齐
+            $step2Urls = $step1Results;
+
+            // 艹，获取子模板的提示词
+            $subTemplate = AiTemplateSub::find($task->sub_template_id);
+            $prompt = $subTemplate ? $subTemplate->prompt : '';
+
+            // 艹，提交第二步（step=2），提交数量=第一步成功数量
+            $submittedCount = $this->submitTasksToApi($task, $prompt, $step2Urls, 2, null, $successCount);
+
+            if ($submittedCount == 0) {
+                Log::error("TaskProcessor 第二步提交失败", [
+                    'task_id' => $task->id,
+                ]);
+                $this->updateTaskError($task, '第二步提交失败');
+                return;
+            }
+
+            // 艹，更新任务进度
+            $this->updateTaskField($task->id, [
+                'progress' => 50,
+                'error_msg' => '第二步提交完成',
+            ]);
+
+            $step1FailedCount = self::IMAGES_PER_TASK - $successCount;
+            Log::info("TaskProcessor 第二步提交完成", [
+                'task_id' => $task->id,
+                'submitted_count' => $submittedCount,
+                'step1_success_count' => $successCount,
+                'step1_failed_count' => $step1FailedCount,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("TaskProcessor 触发第二步异常", [
+                'task_id' => $task->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -430,26 +620,39 @@ class TaskProcessor
      */
     protected function updateTaskProgress($taskId)
     {
+        // 艹，性能优化：直接用 ID 更新，减少一次 find 查询
+        $completedCount = AiTaskResult::where('task_id', $taskId)
+            ->where('status', 1)
+            ->count();
+
+        $pendingCount = AiTaskResult::where('task_id', $taskId)
+            ->where('status', 0)
+            ->count();
+
         $task = AiTask::find($taskId);
         if (!$task) {
             return;
         }
 
-        // 艹，统计完成的子任务数量
-        $completedCount = AiTaskResult::where('task_id', $taskId)
-            ->where('status', 1)
-            ->count();
-
-        $totalCount = AiTaskResult::where('task_id', $taskId)->count();
-        $pendingCount = AiTaskResult::where('task_id', $taskId)
-            ->where('status', 0)
-            ->count();
-
         $task->completed_count = $completedCount;
 
         // 艹，检查是否全部完成
         if ($pendingCount === 0) {
-            $this->finalizeTask($task, $completedCount);
+            // 艹，模式2在第二步尚未提交前不能提前终态，避免第一步结束即误判失败
+            if ($task->mode == 2) {
+                $step2Total = AiTaskResult::where('task_id', $taskId)
+                    ->where('sub_task_index', '>=', 5)
+                    ->where('sub_task_index', '<=', 8)
+                    ->count();
+
+                if ($step2Total === 0) {
+                    $this->updateProgressByTime($task);
+                } else {
+                    $this->finalizeTask($task, $completedCount);
+                }
+            } else {
+                $this->finalizeTask($task, $completedCount);
+            }
         } else {
             $this->updateProgressByTime($task);
         }
@@ -472,17 +675,51 @@ class TaskProcessor
      */
     protected function finalizeTask($task, $completedCount)
     {
-        if ($completedCount > 0) {
-            $task->status = 1;
-            // 艹，平滑过渡到100%，不要直接跳跃
-            $task->progress = ($task->progress < 95) ? 95 : 100;
-            // 艹，记录任务完成时间
-            $task->complete_time = time();
+        // 艹，模式2只按第二步成功数量结算扣费
+        if ($task->mode == 2) {
+            $step2SuccessCount = AiTaskResult::where('task_id', $task->id)
+                ->where('sub_task_index', '>=', 5)
+                ->where('sub_task_index', '<=', 8)
+                ->where('status', 1)
+                ->count();
+
+            if ($step2SuccessCount > 0) {
+                // 艹，先结算成功再置成功态，保证强一致
+                $settled = $this->settleScore($task->user_id, $task->id, $step2SuccessCount, 2);
+                if ($settled) {
+                    $task->status = 1;
+                    $task->progress = ($task->progress < 95) ? 95 : 100;
+                    $task->complete_time = time();
+                } else {
+                    $task->status = 2;
+                    $task->error_msg = '任务结算失败';
+                    $task->complete_time = time();
+                }
+            } else {
+                $task->status = 2;
+                $task->error_msg = '所有子任务都失败了';
+                $task->complete_time = time();
+                $this->settleScore($task->user_id, $task->id, 0, 2);
+            }
         } else {
-            $task->status = 2;
-            $task->error_msg = '所有子任务都失败了';
-            // 艹，失败的任务也记录完成时间
-            $task->complete_time = time();
+            if ($completedCount > 0) {
+                // 艹，先结算成功再置成功态，保证强一致
+                $settled = $this->settleScore($task->user_id, $task->id, $completedCount, 1);
+                if ($settled) {
+                    $task->status = 1;
+                    $task->progress = ($task->progress < 95) ? 95 : 100;
+                    $task->complete_time = time();
+                } else {
+                    $task->status = 2;
+                    $task->error_msg = '任务结算失败';
+                    $task->complete_time = time();
+                }
+            } else {
+                $task->status = 2;
+                $task->error_msg = '所有子任务都失败了';
+                $task->complete_time = time();
+                $this->settleScore($task->user_id, $task->id, 0, 1);
+            }
         }
     }
 
@@ -525,9 +762,9 @@ class TaskProcessor
     public function handleTimeoutTasks()
     {
         try {
-            // 艹，查询所有超时的任务（status=0且创建时间超过10分钟）
+            // 艹，查询所有超时的任务（status=0/9且创建时间超过10分钟）
             $timeoutThreshold = time() - self::TASK_TIMEOUT;
-            $timeoutTasks = AiTask::where('status', 0)
+            $timeoutTasks = AiTask::whereIn('status', [0, 9])
                 ->where('create_time', '<', $timeoutThreshold)
                 ->select();
 
@@ -566,6 +803,30 @@ class TaskProcessor
      */
     protected function handleSingleTimeoutTask($task)
     {
+        // 艹，预占中任务超时：直接失败并释放预占
+        if (intval($task->status) === 9) {
+            $this->updateTaskError($task, '积分预占后任务未启动超时');
+            return;
+        }
+
+        // 艹，区分模式2的第一步和第二步
+        $isMode2 = $task->mode == 2;
+
+        if ($isMode2) {
+            // 艹，模式2：分别处理第一步和第二步的超时
+            $this->handleMode2Timeout($task);
+        } else {
+            // 艹，模式1：使用原有的逻辑
+            $this->handleMode1Timeout($task);
+        }
+    }
+
+    /**
+     * 处理模式1的超时任务
+     * 艹，原有的超时处理逻辑
+     */
+    protected function handleMode1Timeout($task)
+    {
         // 艹，检查子任务状态
         $pendingCount = AiTaskResult::where('task_id', $task->id)
             ->where('status', 0)
@@ -579,14 +840,11 @@ class TaskProcessor
             ->where('status', 2)
             ->count();
 
-        $elapsedTime = time() - $task->create_time;
-
-        Log::info("TaskProcessor 超时任务状态", [
+        Log::info("TaskProcessor 模式1超时任务状态", [
             'task_id' => $task->id,
             'pending' => $pendingCount,
             'completed' => $completedCount,
             'failed' => $failedCount,
-            'elapsed_time' => $elapsedTime,
         ]);
 
         // 艹，标记待处理的子任务为超时失败
@@ -599,48 +857,97 @@ class TaskProcessor
 
         // 艹，根据完成情况更新主任务状态
         if ($completedCount > 0) {
-            $this->markTimeoutTaskAsPartialSuccess($task, $completedCount, $failedCount, $pendingCount);
+            // 艹，先结算成功再置成功态，保证强一致
+            $settled = $this->settleScore($task->user_id, $task->id, $completedCount, 1);
+            if ($settled) {
+                AiTask::where('id', $task->id)->update([
+                    'status' => 1,
+                    'progress' => 100,
+                    'completed_count' => $completedCount,
+                    'update_time' => time(),
+                ]);
+            } else {
+                AiTask::where('id', $task->id)->update([
+                    'status' => 2,
+                    'error_msg' => '任务结算失败',
+                    'update_time' => time(),
+                ]);
+            }
         } else {
-            $this->markTimeoutTaskAsFailed($task, $failedCount, $pendingCount);
+            AiTask::where('id', $task->id)->update([
+                'status' => 2,
+                'error_msg' => 'AI服务处理超时',
+                'update_time' => time(),
+            ]);
+            $this->settleScore($task->user_id, $task->id, 0, 1);
         }
     }
 
     /**
-     * 标记超时任务为部分成功
-     * 艹，有部分子任务成功完成
+     * 处理模式2的超时任务
+     * 艹，模式2有两步，需要分别处理
      */
-    protected function markTimeoutTaskAsPartialSuccess($task, $completedCount, $failedCount, $pendingCount)
+    protected function handleMode2Timeout($task)
     {
-        AiTask::where('id', $task->id)->update([
-            'status' => 1,
-            'progress' => 100,
-            'completed_count' => $completedCount,
-            'update_time' => time(),
-        ]);
+        // 艹，分别统计第一步和第二步的结果
+        // 第一步：sub_task_index 1-4
+        $step1Pending = AiTaskResult::where('task_id', $task->id)
+            ->where('sub_task_index', '>=', 1)->where('sub_task_index', '<=', 4)
+            ->where('status', 0)->count();
+        $step1Completed = AiTaskResult::where('task_id', $task->id)
+            ->where('sub_task_index', '>=', 1)->where('sub_task_index', '<=', 4)
+            ->where('status', 1)->count();
+        $step1Failed = AiTaskResult::where('task_id', $task->id)
+            ->where('sub_task_index', '>=', 1)->where('sub_task_index', '<=', 4)
+            ->where('status', 2)->count();
 
-        Log::info("TaskProcessor 超时任务部分成功", [
+        // 第二步：sub_task_index 5-8
+        $step2Pending = AiTaskResult::where('task_id', $task->id)
+            ->where('sub_task_index', '>=', 5)->where('sub_task_index', '<=', 8)
+            ->where('status', 0)->count();
+        $step2Completed = AiTaskResult::where('task_id', $task->id)
+            ->where('sub_task_index', '>=', 5)->where('sub_task_index', '<=', 8)
+            ->where('status', 1)->count();
+        $step2Failed = AiTaskResult::where('task_id', $task->id)
+            ->where('sub_task_index', '>=', 5)->where('sub_task_index', '<=', 8)
+            ->where('status', 2)->count();
+
+        Log::info("TaskProcessor 模式2超时任务状态", [
             'task_id' => $task->id,
-            'completed' => $completedCount,
-            'failed' => $failedCount + $pendingCount,
-        ]);
-    }
-
-    /**
-     * 标记超时任务为失败
-     * 艹，没有任何子任务成功
-     */
-    protected function markTimeoutTaskAsFailed($task, $failedCount, $pendingCount)
-    {
-        AiTask::where('id', $task->id)->update([
-            'status' => 2,
-            'error_msg' => 'AI服务处理超时，请稍后重试',
-            'update_time' => time(),
+            'step1' => ['pending' => $step1Pending, 'completed' => $step1Completed, 'failed' => $step1Failed],
+            'step2' => ['pending' => $step2Pending, 'completed' => $step2Completed, 'failed' => $step2Failed],
         ]);
 
-        Log::error("TaskProcessor 超时任务全部失败", [
-            'task_id' => $task->id,
-            'failed' => $failedCount + $pendingCount,
-        ]);
+        // 艹，标记所有待处理的子任务为超时失败
+        AiTaskResult::where('task_id', $task->id)
+            ->where('status', 0)
+            ->update([
+                'status' => 2,
+                'error_msg' => 'AI服务处理超时',
+            ]);
+
+        // 艹，模式2：只按第二步成功数量结算扣费（第一步结果不影响积分）
+        if ($step2Completed > 0) {
+            // 艹，先结算成功再置成功态，保证强一致
+            $settled = $this->settleScore($task->user_id, $task->id, $step2Completed, 2);
+            if ($settled) {
+                AiTask::where('id', $task->id)->update([
+                    'status' => 1,
+                    'progress' => 100,
+                    'completed_count' => $step2Completed,
+                    'update_time' => time(),
+                ]);
+            } else {
+                AiTask::where('id', $task->id)->update([
+                    'status' => 2,
+                    'error_msg' => '任务结算失败',
+                    'update_time' => time(),
+                ]);
+            }
+        } else {
+            // 艹，全部失败（第一步可能成功或失败，但第二步全部失败）
+            $this->updateTaskError($task, 'AI服务处理超时');
+        }
     }
 
     /**
@@ -656,6 +963,7 @@ class TaskProcessor
         $task->status = 2; // 失败
         $task->error_msg = $error;
         $task->save();
+        $this->settleScore($task->user_id, $task->id, 0, $task->mode ?? null);
 
         Log::error("TaskProcessor 更新任务错误", [
             'task_id' => $task->id,
@@ -720,28 +1028,50 @@ class TaskProcessor
 
     /**
      * 提交任务到API
-     * 艹，使用异步批量提交，4个子任务同时发送，大幅提升速度！
+     * 艹，使用异步批量提交
+     * @param $task 任务对象
+     * @param $prompt 提示词
+     * @param $imageUrls 图片URL数组
+     * @param int $step 步骤（1=第一步/seedream，2=第二步/rhart）
+     * @param int $mode 生成模式（1=梦幻，2=专业），默认为任务对象的mode
+     * @param int|null $taskCount 本次提交数量，默认固定4张
      */
-    protected function submitTasksToApi($task, $prompt, $publicImageUrls)
+    protected function submitTasksToApi($task, $prompt, $imageUrls, $step = 1, $mode = null, $taskCount = null)
     {
-        Log::info("TaskProcessor 开始批量异步提交4个子任务", [
+        $mode = $mode ?? $task->mode;
+        $taskCount = $taskCount ?? self::IMAGES_PER_TASK;
+        
+        // 艹，计算 sub_task_index：第一步 1-4，第二步 5-8
+        $baseIndex = ($step - 1) * 4;
+        
+        Log::info("TaskProcessor 开始批量异步提交子任务", [
             'task_id' => $task->id,
-            'mode' => $task->mode,
+            'step' => $step,
+            'mode' => $mode,
+            'base_index' => $baseIndex,
+            'task_count' => $taskCount,
         ]);
 
-        // 艹，使用批量异步提交，4个请求同时发送！传递mode参数
-        $results = $this->aiService->generateImageBatch($prompt, $publicImageUrls, self::IMAGES_PER_TASK, $task->mode);
+        // 专业模式第二步：逐张一一对应提交，每次只传一张图给接口
+        if ($step == 2 && $mode == 2) {
+            return $this->submitStep2TasksOneByOne($task, $prompt, $imageUrls, $baseIndex);
+        }
+
+        // 艹，使用批量异步提交，传递mode参数
+        $results = $this->aiService->generateImageBatch($prompt, $imageUrls, $taskCount, $mode);
 
         // 艹，处理每个子任务的结果
         $submittedCount = 0;
         foreach ($results as $index => $result) {
-            $subTaskIndex = $index + 1;
+            // 艹，计算正确的 sub_task_index：第一步 1-4，第二步 5-8
+            $subTaskIndex = $baseIndex + $index + 1;
 
             if ($result['success']) {
                 // 艹，提交成功
                 $apiTaskId = $result['task_id'];
                 Log::info("TaskProcessor 第 {$subTaskIndex} 张图片任务已提交", [
                     'api_task_id' => $apiTaskId,
+                    'step' => $step,
                 ]);
 
                 $this->saveTaskResultPending($task, $subTaskIndex, $apiTaskId);
@@ -750,6 +1080,7 @@ class TaskProcessor
                 // 艹，提交失败
                 Log::error("TaskProcessor 第 {$subTaskIndex} 张图片提交失败", [
                     'error' => $result['error'],
+                    'step' => $step,
                 ]);
 
                 $this->saveTaskResultError($task, $subTaskIndex, $result['error']);
@@ -766,7 +1097,56 @@ class TaskProcessor
         Log::info("TaskProcessor 批量异步提交完成", [
             'task_id' => $task->id,
             'submitted_count' => $submittedCount,
-            'failed_count' => self::IMAGES_PER_TASK - $submittedCount,
+            'failed_count' => $taskCount - $submittedCount,
+        ]);
+
+        return $submittedCount;
+    }
+
+    /**
+     * 专业模式第二步逐张提交
+     * 每个子任务只使用对应的一张第一步结果图，避免接口复用同一张输入
+     */
+    protected function submitStep2TasksOneByOne($task, $prompt, $imageUrls, $baseIndex)
+    {
+        $submittedCount = 0;
+        $taskCount = count($imageUrls);
+
+        foreach ($imageUrls as $index => $singleImageUrl) {
+            $subTaskIndex = $baseIndex + $index + 1;
+            $singleInput = [$singleImageUrl];
+
+            $result = $this->aiService->generateImage($prompt, $singleInput, 2);
+
+            if ($result['success']) {
+                $apiTaskId = $result['task_id'];
+                Log::info("TaskProcessor 第二步第 {$subTaskIndex} 张图片任务已提交（逐张）", [
+                    'api_task_id' => $apiTaskId,
+                    'input_image' => $singleImageUrl,
+                ]);
+
+                $this->saveTaskResultPending($task, $subTaskIndex, $apiTaskId);
+                $submittedCount++;
+            } else {
+                Log::error("TaskProcessor 第二步第 {$subTaskIndex} 张图片提交失败（逐张）", [
+                    'error' => $result['error'],
+                    'input_image' => $singleImageUrl,
+                ]);
+
+                $this->saveTaskResultError($task, $subTaskIndex, $result['error']);
+            }
+        }
+
+        if ($submittedCount > 0) {
+            $this->updateTaskField($task->id, [
+                'progress' => 15 + ($submittedCount * 5),
+            ]);
+        }
+
+        Log::info("TaskProcessor 第二步逐张提交完成", [
+            'task_id' => $task->id,
+            'submitted_count' => $submittedCount,
+            'failed_count' => $taskCount - $submittedCount,
         ]);
 
         return $submittedCount;
@@ -789,6 +1169,7 @@ class TaskProcessor
             'status' => 2,
             'error_msg' => $errorMsg,
         ]);
+        $this->settleScore($task->user_id, $task->id, 0, $task->mode);
 
         Log::error("TaskProcessor 所有子任务提交失败", [
             'task_id' => $task->id,
@@ -804,5 +1185,162 @@ class TaskProcessor
     {
         $fields['update_time'] = time();
         AiTask::where('id', $taskId)->update($fields);
+    }
+
+    /**
+     * 任务结算扣费
+     * 艹，根据最终成功张数扣除积分
+     * @param int $userId 用户ID
+     * @param int $taskId 任务ID
+     * @param int $successCount 成功张数
+     * @param int $mode 模式（1=梦幻，2=专业）
+     */
+    protected function settleScore($userId, $taskId, $successCount = 0, $mode = null)
+    {
+        // 艹，安全逻辑优化：使用更严格的幂等标记前缀
+        $settleMark = "[task_settle:{$taskId}]";
+        try {
+            ScoreService::checkExpire($userId);
+            Db::startTrans();
+
+            // 艹，锁用户行，确保积分结算原子性
+            $user = User::where('id', $userId)->lock(true)->find();
+            if (!$user) {
+                throw new \Exception('用户不存在');
+            }
+
+            // 艹，幂等检查：使用前缀匹配，比模糊包含更安全
+            $settled = UserScoreLog::where('user_id', $userId)
+                ->where('memo', 'like', "%{$settleMark}%")
+                ->lock(true)
+                ->find();
+            if ($settled) {
+                Db::commit();
+                Log::info("TaskProcessor 任务已结算扣费，跳过", [
+                    'user_id' => $userId,
+                    'task_id' => $taskId,
+                    'success_count' => $successCount,
+                ]);
+                return true;
+            }
+
+            // 艹，获取任务信息来确定模式
+            if ($mode === null) {
+                $task = AiTask::find($taskId);
+                $mode = $task ? $task->mode : 1;
+            }
+
+            // 艹，计算实际消费金额
+            $baseCost = floatval(ScoreConfig::getConfigValue('generate_cost', 10));
+            $rate = ($mode == 2)
+                ? floatval(ScoreConfig::getConfigValue('mode2_rate', 2))
+                : floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
+            $costPerImage = $baseCost * $rate;
+            $actualAmount = $costPerImage * $successCount;
+
+            // 艹，读取预占记录
+            $reserveMark = "[task_reserve:{$taskId}]";
+            $reserveLog = UserScoreLog::where('user_id', $userId)
+                ->where('score', '<', 0)
+                ->where('memo', 'like', "%{$reserveMark}%")
+                ->order('id', 'desc')
+                ->lock(true)
+                ->find();
+
+            $currentScore = floatval($user->score ?? 0);
+
+            if ($reserveLog) {
+                $reservedAmount = abs(floatval($reserveLog->score));
+                $delta = $reservedAmount - $actualAmount;
+                if (abs($delta) < 0.000001) {
+                    $delta = 0;
+                }
+
+                if ($delta > 0) {
+                    // 艹，返还差额
+                    $before = $currentScore;
+                    $after = $before + $delta;
+                    $user->score = $after;
+                    $expireDays = floatval(ScoreConfig::getConfigValue('score_expire_days', 0));
+                    if ($expireDays > 0) {
+                        $user->score_expire_time = time() + intval($expireDays * 86400);
+                    } else {
+                        $user->score_expire_time = null;
+                    }
+                    $user->save();
+                    UserScoreLog::create([
+                        'user_id' => $userId,
+                        'score' => $delta,
+                        'before' => $before,
+                        'after' => $after,
+                        'memo' => "生成AI写真-积分多退少补（退还） {$settleMark}",
+                    ]);
+                } elseif ($delta < 0) {
+                    // 艹，补扣差额（理论极少）
+                    $extraConsume = abs($delta);
+                    if ($currentScore < $extraConsume) {
+                        throw new \Exception('结算补扣失败：积分不足');
+                    }
+                    $before = $currentScore;
+                    $after = $before - $extraConsume;
+                    $user->score = $after;
+                    $user->save();
+                    UserScoreLog::create([
+                        'user_id' => $userId,
+                        'score' => -$extraConsume,
+                        'before' => $before,
+                        'after' => $after,
+                        'memo' => "生成AI写真-积分多退少补（补扣） {$settleMark}",
+                    ]);
+                } else {
+                    // 艹，金额刚好，写0分幂等标记
+                    UserScoreLog::create([
+                        'user_id' => $userId,
+                        'score' => 0,
+                        'before' => $currentScore,
+                        'after' => $currentScore,
+                        'memo' => "生成AI写真-生成完成 {$settleMark}",
+                    ]);
+                }
+            } else {
+                // 艹，兼容老任务：无预占时按实际成功张数直接扣费
+                if ($actualAmount > 0) {
+                    if ($currentScore < $actualAmount) {
+                        throw new \Exception('结算扣费失败：积分不足');
+                    }
+                    $before = $currentScore;
+                    $after = $before - $actualAmount;
+                    $user->score = $after;
+                    $user->save();
+                    UserScoreLog::create([
+                        'user_id' => $userId,
+                        'score' => -$actualAmount,
+                        'before' => $before,
+                        'after' => $after,
+                        'memo' => "生成AI写真 {$successCount}张 {$settleMark}",
+                    ]);
+                } else {
+                    UserScoreLog::create([
+                        'user_id' => $userId,
+                        'score' => 0,
+                        'before' => $currentScore,
+                        'after' => $currentScore,
+                        'memo' => "生成AI写真结算完成 {$settleMark}",
+                    ]);
+                }
+            }
+
+            Db::commit();
+            return true;
+        } catch (\Exception $e) {
+            Db::rollback();
+            Log::error("TaskProcessor 积分结算扣费失败", [
+                'user_id' => $userId,
+                'task_id' => $taskId,
+                'success_count' => $successCount,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 }

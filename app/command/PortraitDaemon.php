@@ -46,6 +46,10 @@ class PortraitDaemon extends Command
 
                 // 艹，成功执行一轮，重置错误计数
                 $consecutiveErrors = 0;
+
+                // 艹，性能优化：长驻进程强制回收内存，防止 OOM
+                gc_collect_cycles();
+
                 sleep(2);  // 艹，优化：5秒→2秒，加快循环速度
             } catch (\Exception $e) {
                 $consecutiveErrors++;
@@ -86,26 +90,45 @@ class PortraitDaemon extends Command
     protected function processNewTasks(Output $output)
     {
         try {
-            // 使用左连接查询，找出没有子任务记录的任务
+            // 艹，核心逻辑优化：使用事务和排他锁抢占任务，防止多个进程处理同一个任务
+            \think\facade\Db::startTrans();
+
+            // 使用左连接查询，找出没有子任务记录的任务，并加排他锁
             $tasks = AiTask::alias('t')
                 ->leftJoin('ba_ai_task_result r', 't.id = r.task_id')
                 ->where('t.status', 0)
                 ->whereNull('r.id')
                 ->field('t.*')
                 ->order('t.id', 'asc')
-                ->limit(20)  // 艹，优化：10→20，每次处理更多任务
+                ->limit(20)
+                ->lock(true)
                 ->select();
 
             if ($tasks->isEmpty()) {
+                \think\facade\Db::rollback();
                 return;
             }
 
-            // 艹，处理新任务
+            // 艹，先把状态改了，占住坑位再慢慢处理
+            $taskIds = [];
+            foreach ($tasks as $task) {
+                $taskIds[] = $task->id;
+            }
+
+            // 状态改为 1 (处理中)
+            AiTask::whereIn('id', $taskIds)->update(['status' => 1, 'update_time' => time()]);
+
+            // 提交事务，让其他进程看到这些任务已经被占了
+            \think\facade\Db::commit();
+
+            // 艹，处理已经占领的任务
             foreach ($tasks as $task) {
                 $this->processSingleNewTask($output, $task);
-                // 艹，优化：去掉sleep(1)，加快处理速度
             }
         } catch (\Exception $e) {
+            if (\think\facade\Db::isStartTrans()) {
+                \think\facade\Db::rollback();
+            }
             Log::error("PortraitDaemon processNewTasks 异常", [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
@@ -125,6 +148,7 @@ class PortraitDaemon extends Command
             Log::info("PortraitDaemon 开始处理新任务: {$task->id}");
 
             $processor = new TaskProcessor();
+            // 艹，注意：process 内部如果还有修改 status 的逻辑需要兼容
             $result = $processor->process($task->id);
 
             if ($result) {
@@ -157,7 +181,7 @@ class PortraitDaemon extends Command
             AiTask::where('id', $taskId)->update([
                 'status' => 2,
                 'error_msg' => $errorMsg,
-                'updatetime' => time(),
+                'update_time' => time(),
             ]);
         } catch (\Exception $e) {
             Log::error("PortraitDaemon 更新任务状态失败", [
