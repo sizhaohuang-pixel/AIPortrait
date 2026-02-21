@@ -20,6 +20,33 @@
 			}
 		},
 		{
+			"path": "pages/discovery/index",
+			"style": {
+				"navigationBarTitleText": "发现",
+				"enablePullDownRefresh": true
+			}
+		},
+		{
+			"path": "pages/discovery/detail",
+			"style": {
+				"navigationBarTitleText": "笔记详情",
+				"navigationBarBackgroundColor": "#F8F8F8"
+			}
+		},
+		{
+			"path": "pages/discovery/post",
+			"style": {
+				"navigationBarTitleText": "发布笔记"
+			}
+		},
+		{
+			"path": "pages/discovery/my",
+			"style": {
+				"navigationBarTitleText": "我的笔记",
+				"enablePullDownRefresh": true
+			}
+		},
+		{
 			"path": "pages/upload/index",
 			"style": {
 				"navigationBarTitleText": "上传照片"
@@ -47,7 +74,7 @@
 		{
 			"path": "pages/history/index",
 			"style": {
-				"navigationBarTitleText": "历史记录"
+				"navigationBarTitleText": "我的相册"
 			}
 		},
 		{
@@ -81,6 +108,27 @@
 				"navigationBarTitleText": "编辑资料",
 				"navigationBarBackgroundColor": "#FFFFFF"
 			}
+		},
+		{
+			"path": "pages/user/note-list",
+			"style": {
+				"navigationBarTitleText": "列表",
+				"enablePullDownRefresh": true
+			}
+		},
+		{
+			"path": "pages/user/user-list",
+			"style": {
+				"navigationBarTitleText": "列表",
+				"enablePullDownRefresh": true
+			}
+		},
+		{
+			"path": "pages/share/index",
+			"style": {
+				"navigationBarTitleText": "非鱼影像馆",
+				"navigationBarBackgroundColor": "#F8F8F8"
+			}
 		}
 	],
 	"globalStyle": {
@@ -100,6 +148,12 @@
 				"text": "首页",
 				"iconPath": "static/icons/home.png",
 				"selectedIconPath": "static/icons/home-active.png"
+			},
+			{
+				"pagePath": "pages/discovery/index",
+				"text": "发现",
+				"iconPath": "static/icons/share.png",
+				"selectedIconPath": "static/icons/share.png"
 			},
 			{
 				"pagePath": "pages/mine/index",

@@ -70,10 +70,20 @@ export function getHistory(page = 1, limit = 10) {
  * 删除历史记录
  * @param {Number} id 任务ID
  * @returns {Promise}
- * 老王提示：改用查询参数方式，别tm用路径参数了
+ * 老王提示：改用 post 方式，绕过服务器 DELETE 限制
  */
 export function deleteHistory(id) {
-	return del(API_PATHS.portrait.deleteHistory, { id })
+	return post(API_PATHS.portrait.deleteHistory, { id })
+}
+
+/**
+ * 删除单张结果图片
+ * @param {Number} id 图片ID
+ * @returns {Promise}
+ * 老王提示：改用 post 方式，绕过服务器 DELETE 限制
+ */
+export function deleteResultImage(id) {
+	return post(API_PATHS.portrait.deleteResult, { id })
 }
 
 export default {
@@ -83,5 +93,6 @@ export default {
 	generatePortrait,
 	getTaskProgress,
 	getHistory,
-	deleteHistory
+	deleteHistory,
+	deleteResultImage
 }

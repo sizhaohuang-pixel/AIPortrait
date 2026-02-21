@@ -30,12 +30,36 @@
 			<button class="recharge-btn" @tap.stop="goRecharge">充值</button>
 		</view>
 
+		<!-- 艹，社交统计 -->
+		<view v-if="isLogin" class="stats-bar">
+			<view class="stats-item" @tap="goSocialList('note', 'likes')">
+				<text class="stats-value">{{ userStats.received_likes || 0 }}</text>
+				<text class="stats-label">获赞</text>
+			</view>
+			<view class="stats-item" @tap="goSocialList('note', 'collections')">
+				<text class="stats-value">{{ userStats.received_collections || 0 }}</text>
+				<text class="stats-label">收藏</text>
+			</view>
+			<view class="stats-item" @tap="goSocialList('user', 'fans')">
+				<text class="stats-value">{{ userStats.fans_count || 0 }}</text>
+				<text class="stats-label">粉丝</text>
+			</view>
+			<view class="stats-item" @tap="goSocialList('user', 'follows')">
+				<text class="stats-value">{{ userStats.follow_count || 0 }}</text>
+				<text class="stats-label">关注</text>
+			</view>
+		</view>
+
 		<view class="section">
 			<view class="section-title">常用</view>
 			<view class="list">
 				<view class="list-item" @tap="goHistory">
-					<view class="item-title">历史记录</view>
-					<view class="item-desc">查看生成结果</view>
+					<view class="item-title">我的相册</view>
+					<view class="item-desc">查看我生成的作品</view>
+				</view>
+				<view class="list-item" @tap="goMyNotes">
+					<view class="item-title">我的笔记</view>
+					<view class="item-desc">查看我发布的动态</view>
 				</view>
 			</view>
 		</view>
@@ -47,7 +71,7 @@
 					<view class="item-title">关于我们</view>
 				</view>
 				<view class="list-item" @tap="goAgreement('privacy')">
-					<view class="item-title">隐私协议</view>
+					<view class="item-title">隐私政策</view>
 				</view>
 				<view class="list-item" @tap="goAgreement('user')">
 					<view class="item-title">用户协议</view>
@@ -75,6 +99,13 @@
 					score: 0,
 					expire_time: 0,
 					expire_days: 0
+				},
+				// 艹，社交统计
+				userStats: {
+					received_likes: 0,
+					received_collections: 0,
+					fans_count: 0,
+					follow_count: 0
 				}
 			}
 		},
@@ -119,9 +150,10 @@
 			console.log('avatarText:', this.avatarText)
 			console.log('==================')
 
-			// 艹，如果已登录，获取积分信息
+			// 艹，如果已登录，获取积分信息和社交统计
 			if (this.isLogin) {
 				this.getScoreInfo()
+				this.getUserStats()
 			}
 		},
 		methods: {
@@ -153,6 +185,22 @@
 				}
 			},
 
+			// 艹，获取社交统计
+			getUserStats() {
+				get('/api/user/info').then(res => {
+					this.userStats = res.stats
+				}).catch(error => {
+					console.error('获取社交统计失败:', error)
+				})
+			},
+
+			// 艹，跳转到社交列表页面
+			goSocialList(pageType, listType) {
+				if (!requireLogin()) return
+				const url = `/pages/user/${pageType}-list?type=${listType}`
+				uni.navigateTo({ url })
+			},
+
 			// 艹，跳转到积分明细页面
 			goScoreDetail() {
 				uni.navigateTo({ url: '/pages/score/detail' })
@@ -169,6 +217,14 @@
 					return
 				}
 				uni.navigateTo({ url: '/pages/history/index' })
+			},
+
+			goMyNotes() {
+				if (!requireLogin()) {
+					return
+				}
+				// 艹，跳到专用的“我的笔记”页面，不再跳 TabBar 页面
+				uni.navigateTo({ url: '/pages/discovery/my' })
 			},
 
 			// 艹，跳转到协议页面
@@ -402,5 +458,47 @@
 
 	.recharge-btn:active {
 		background: #3d3530;
+	}
+
+	/* 艹，社交统计样式 */
+	.stats-bar {
+		margin-top: 28rpx;
+		display: flex;
+		justify-content: space-around;
+		padding: 30rpx 0;
+		background: #ffffff;
+		border-radius: 26rpx;
+		box-shadow: 0 12rpx 26rpx rgba(37, 30, 25, 0.06);
+		border: 1rpx solid #f0e6df;
+	}
+
+	.stats-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		flex: 1;
+		position: relative;
+	}
+
+	.stats-item:not(:last-child)::after {
+		content: '';
+		position: absolute;
+		right: 0;
+		top: 20%;
+		height: 60%;
+		width: 1rpx;
+		background: #f0e6df;
+	}
+
+	.stats-value {
+		font-size: 32rpx;
+		font-weight: 700;
+		color: #2b2521;
+		margin-bottom: 4rpx;
+	}
+
+	.stats-label {
+		font-size: 22rpx;
+		color: #9a8f88;
 	}
 </style>

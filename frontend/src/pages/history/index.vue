@@ -1,8 +1,8 @@
 <template>
 	<view class="page">
 		<view class="header">
-			<view class="title">历史记录</view>
-			<view class="sub">最近生成的作品</view>
+			<view class="title">我的相册</view>
+			<view class="sub">我生成的 AI 写真作品</view>
 		</view>
 
 		<SkeletonLoader v-if="loading" />
@@ -21,7 +21,7 @@
 				</view>
 			</view>
 		</view>
-		<view v-else class="empty">暂无记录</view>
+		<view v-else class="empty">相册空空如也</view>
 	</view>
 </template>
 
@@ -126,7 +126,7 @@
 						next.push({
 							...item,
 							coverUrl: cover,
-							timeText: this.formatTime(item.completetime ? item.completetime * 1000 : item.createtime * 1000),
+							timeText: this.formatTime(item.complete_time ? item.complete_time * 1000 : item.create_time * 1000),
 							progress: item.progress || 0
 						})
 					}
@@ -200,8 +200,8 @@
 			deleteItem(item) {
 				const self = this
 				uni.showModal({
-					title: '删除记录',
-					content: '确认删除这条历史记录吗？',
+					title: '确认删除',
+					content: '要从相册中移除这张写真吗？',
 					success: async function(res) {
 						if (res.confirm) {
 							try {

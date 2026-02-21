@@ -15,17 +15,14 @@ const PRODUCTION_BASE_URL = 'https://www.bbhttp.com'  // 改成你的生产域�
 // API基础配置
 export const API_CONFIG = {
 	// 基础URL - 根据编译环境自动切换
-	// 开发环境：http://localhost:8000
-	// 生产环境：使用上面配置的 PRODUCTION_BASE_URL
-// #ifdef H5
-	baseURL: process.env.NODE_ENV === 'production'
-		? PRODUCTION_BASE_URL
-		: 'http://localhost:8000',
-// #endif
-// #ifndef H5
-	// 艹，小程序和 App 环境，直接使用生产环境地址
-	baseURL: PRODUCTION_BASE_URL,
-// #endif
+	// 艹，老王加固版判断逻辑：优先看 import.meta.env，再看 process.env
+	baseURL: (function() {
+		// 如果是开发模式
+		const isDev = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) ||
+					 (process.env.NODE_ENV === 'development')
+
+		return isDev ? 'http://localhost:8000' : PRODUCTION_BASE_URL
+	})(),
 
 	// 请求超时时间（毫秒）
 	timeout: 10000,
@@ -44,8 +41,10 @@ export const API_PATHS = {
 		template: '/api/portrait/template',       // 获取模板详情
 		generate: '/api/portrait/generate',       // 创建生成任务
 		task: '/api/portrait/task',               // 查询任务进度
+		share: '/api/portrait/share',              // 艹，新增分享接口路径
+		deleteResult: '/api/portrait/deleteResult', // 艹，试下驼峰路径，看服务器认不认
 		history: '/api/portrait/history',         // 获取历史记录
-		deleteHistory: '/api/portrait/deleteHistory', // 删除历史记录（老王提示：别tm用错路径了）
+		deleteHistory: '/api/portrait/deleteHistory', // 艹，试下驼峰路径，看服务器认不认
 	},
 
 	// 文件上传接口

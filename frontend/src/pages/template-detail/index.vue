@@ -38,6 +38,7 @@
 				>
 					<view class="mode-name">梦幻模式</view>
 					<view class="mode-desc">适合艺术写真</view>
+					<view class="mode-cost">消耗 {{ scoreConfig.mode1_cost || '-' }} 积分</view>
 				</view>
 				<view
 					:class="['mode-card', activeMode === 2 ? 'is-active' : '']"
@@ -45,6 +46,7 @@
 				>
 					<view class="mode-name">专业模式</view>
 					<view class="mode-desc">高清专业效果</view>
+					<view class="mode-cost">消耗 {{ scoreConfig.mode2_cost || '-' }} 积分</view>
 				</view>
 			</view>
 		</view>
@@ -73,7 +75,11 @@
 					sub_templates: []
 				},
 				activeSubId: 0,
-				activeMode: 1  // 艹，默认选择梦幻模式
+				activeMode: 1,  // 艹，默认选择梦幻模式
+				scoreConfig: {
+					mode1_cost: 0,
+					mode2_cost: 0
+				}
 			}
 		},
 		computed: {
@@ -104,6 +110,8 @@
 		},
 		onLoad(query) {
 			const templateId = query.templateId || 0
+			// 艹，加载积分配置
+			this.loadScoreConfig()
 			if (templateId > 0) {
 				this.loadTemplateDetail(templateId)
 			} else {
@@ -117,6 +125,19 @@
 			}
 		},
 		methods: {
+			// 艹，加载积分配置
+			async loadScoreConfig() {
+				try {
+					const data = await this.request('/api/score/config')
+					this.scoreConfig = {
+						mode1_cost: data.mode1_cost || 0,
+						mode2_cost: data.mode2_cost || 0
+					}
+				} catch (error) {
+					console.error('加载积分配置失败：', error)
+				}
+			},
+
 			// 加载模板详情
 			async loadTemplateDetail(templateId) {
 				try {
@@ -342,6 +363,13 @@
 		margin-top: 8rpx;
 		font-size: 22rpx;
 		color: #7a6f69;
+	}
+
+	.mode-cost {
+		margin-top: 12rpx;
+		font-size: 24rpx;
+		font-weight: 600;
+		color: #8b5a2b;
 	}
 
 	.footer {

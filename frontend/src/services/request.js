@@ -200,7 +200,7 @@ export function upload(filePath) {
 			header['ba-user-token'] = token
 		}
 
-		// 艹，构建完整 URL
+		// 艹，构建完整 URL（改为驼峰试试，有些配置不走蛇形）
 		const uploadUrl = API_CONFIG.baseURL + '/api/portrait/uploadToRunningHub'
 
 		// 艹，调试日志

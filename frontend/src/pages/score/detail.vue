@@ -16,7 +16,7 @@
 				<view v-for="(item, index) in list" :key="index" class="list-item">
 					<view class="item-left">
 						<view class="item-memo">{{ item.memo }}</view>
-						<view class="item-time">{{ formatTime(item.createtime) }}</view>
+						<view class="item-time">{{ formatTime(item.create_time) }}</view>
 					</view>
 					<view class="item-right">
 						<view class="item-score" :class="item.score > 0 ? 'score-add' : 'score-sub'">
