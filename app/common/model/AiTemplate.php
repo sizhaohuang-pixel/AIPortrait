@@ -16,7 +16,10 @@ class AiTemplate extends Model
     protected $autoWriteTimestamp = false;
 
     // 追加属性
-    protected $append = [];
+    protected $append = [
+        'status_text',
+        'gender_text'
+    ];
 
     /**
      * 关联风格
