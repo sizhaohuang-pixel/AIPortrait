@@ -194,11 +194,20 @@ class Portrait extends Frontend
             if ($styleId > 0) {
                 $where['style_id'] = $styleId;
             }
-            if ($gender > 0) {
-                $where['gender'] = $gender;
-            }
 
             $query = Db::name('ai_template')->where($where);
+
+            // 艹，性别筛选：包含逻辑 (1=男, 2=女, 3=通用)
+            // 如果选男，则显示男+通用；如果选女，则显示女+通用
+            if ($gender > 0) {
+                if ($gender === 1) {
+                    $query->whereIn('gender', [1, 3]);
+                } elseif ($gender === 2) {
+                    $query->whereIn('gender', [2, 3]);
+                } else {
+                    $query->where('gender', 3);
+                }
+            }
 
             // 艹，人数筛选：1=单人, 2=双人, 3=多人
             if ($personCount > 0) {

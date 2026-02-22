@@ -9,20 +9,14 @@ export const USE_MOCK = false
 
 // ==================== 重要配置 ====================
 // 艹，生产环境的 API 地址，打包前记得改这里！
-const PRODUCTION_BASE_URL = 'https://www.bbhttp.com'  // 改成你的生产域名
+const PRODUCTION_BASE_URL = 'https://www.bbhttp.com'
 // ================================================
 
 // API基础配置
 export const API_CONFIG = {
 	// 基础URL - 根据编译环境自动切换
-	// 艹，老王加固版判断逻辑：优先看 import.meta.env，再看 process.env
-	baseURL: (function() {
-		// 如果是开发模式
-		const isDev = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) ||
-					 (process.env.NODE_ENV === 'development')
-
-		return isDev ? 'http://localhost:8000' : PRODUCTION_BASE_URL
-	})(),
+	// 艹，简单点，别搞那些 import.meta 的花活，防止小程序编译器发疯
+	baseURL: PRODUCTION_BASE_URL,
 
 	// 请求超时时间（毫秒）
 	timeout: 10000,
