@@ -15,8 +15,10 @@ const PRODUCTION_BASE_URL = 'https://www.bbhttp.com'
 // API基础配置
 export const API_CONFIG = {
 	// 基础URL - 根据编译环境自动切换
-	// 艹，简单点，别搞那些 import.meta 的花活，防止小程序编译器发疯
-	baseURL: PRODUCTION_BASE_URL,
+	// 艹，老王回归稳健版：用最原始的 process.env，别搞那些花里胡哨的
+	baseURL: process.env.NODE_ENV === 'development'
+		? 'http://localhost:8000'
+		: PRODUCTION_BASE_URL,
 
 	// 请求超时时间（毫秒）
 	timeout: 10000,
