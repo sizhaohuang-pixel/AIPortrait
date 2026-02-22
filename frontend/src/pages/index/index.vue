@@ -124,7 +124,7 @@
 				return style ? style.name : '分类'
 			},
 			genderLabel() {
-				const map = { 0: '性别', 1: '男', 2: '女', 3: '通用' }
+				const map = { 0: '性别', 1: '男', 2: '女' }
 				return map[this.filters.gender]
 			},
 			personLabel() {
@@ -148,8 +148,7 @@
 					return [
 						{ label: '全部性别', value: 0 },
 						{ label: '男生', value: 1 },
-						{ label: '女生', value: 2 },
-						{ label: '通用/双人', value: 3 }
+						{ label: '女生', value: 2 }
 					]
 				}
 				if (this.activeFilter === 'person') {

@@ -197,16 +197,10 @@ class Portrait extends Frontend
 
             $query = Db::name('ai_template')->where($where);
 
-            // 艹，性别筛选：包含逻辑 (1=男, 2=女, 3=通用)
-            // 如果选男，则显示男+通用；如果选女，则显示女+通用
+            // 艹，性别筛选：包含逻辑 (用户选 1=男 或 2=女)
+            // 使用 FIND_IN_SET 检查数据库中的性别集合是否包含用户选择的性别
             if ($gender > 0) {
-                if ($gender === 1) {
-                    $query->whereIn('gender', [1, 3]);
-                } elseif ($gender === 2) {
-                    $query->whereIn('gender', [2, 3]);
-                } else {
-                    $query->where('gender', 3);
-                }
+                $query->whereRaw("FIND_IN_SET(?, gender)", [$gender]);
             }
 
             // 艹，人数筛选：1=单人, 2=双人, 3=多人

@@ -37,11 +37,17 @@ class AiTemplate extends Model
 
     /**
      * 性别文本
-     * 老王提示：1=男, 2=女, 3=通用
+     * 老王提示：支持多选显示，如 "男,女"
      */
     public function getGenderTextAttr($value, $data): string
     {
-        $genders = [0 => '未指定', 1 => '男', 2 => '女', 3 => '通用'];
-        return $genders[$data['gender']] ?? '未知';
+        if (empty($data['gender'])) return '未指定';
+        $genders = [1 => '男', 2 => '女'];
+        $ids = explode(',', $data['gender']);
+        $res = [];
+        foreach ($ids as $id) {
+            if (isset($genders[$id])) $res[] = $genders[$id];
+        }
+        return implode(',', $res);
     }
 }

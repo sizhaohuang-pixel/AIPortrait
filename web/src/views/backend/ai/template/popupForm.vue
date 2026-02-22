@@ -65,11 +65,11 @@
                     <FormItem
                         label="性别"
                         v-model="baTable.form.items!.gender"
-                        type="radio"
+                        type="checkbox"
                         prop="gender"
                         :input-attr="{
                             border: true,
-                            content: { 0: '未指定', 1: '男', 2: '女', 3: '通用' },
+                            content: { 1: '男', 2: '女' },
                         }"
                     />
                     <el-form-item prop="usage_count" label="使用次数">
