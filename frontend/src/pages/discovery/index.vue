@@ -20,12 +20,18 @@
 						<text class="content">{{ item.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
 							<view class="user">
-								<image class="avatar" :src="(item.user && item.user.avatar) || '/static/logo.png'"></image>
+								<image class="avatar" :src="formattedAvatar(item.user && item.user.avatar)"></image>
 								<text class="nickname">{{ item.user ? item.user.nickname : '匿名用户' }}</text>
 							</view>
-							<view class="likes">
-								<text class="like-icon">❤</text>
-								<text class="count">{{ item.likes_count }}</text>
+							<view class="stats">
+								<view class="stat-item">
+									<text :class="['stat-icon', 'like-icon', item.is_like ? 'is-active' : '']">{{ item.is_like ? '❤' : '♡' }}</text>
+									<text class="count">{{ item.likes_count }}</text>
+								</view>
+								<view class="stat-item" v-if="item.collections_count > 0 || item.is_collection">
+									<text :class="['stat-icon', 'collect-icon', item.is_collection ? 'is-active' : '']">{{ item.is_collection ? '★' : '☆' }}</text>
+									<text class="count">{{ item.collections_count }}</text>
+								</view>
 							</view>
 						</view>
 					</view>
@@ -38,12 +44,18 @@
 						<text class="content">{{ item.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
 							<view class="user">
-								<image class="avatar" :src="(item.user && item.user.avatar) || '/static/logo.png'"></image>
+								<image class="avatar" :src="formattedAvatar(item.user && item.user.avatar)"></image>
 								<text class="nickname">{{ item.user ? item.user.nickname : '匿名用户' }}</text>
 							</view>
-							<view class="likes">
-								<text class="like-icon">❤</text>
-								<text class="count">{{ item.likes_count }}</text>
+							<view class="stats">
+								<view class="stat-item">
+									<text :class="['stat-icon', 'like-icon', item.is_like ? 'is-active' : '']">{{ item.is_like ? '❤' : '♡' }}</text>
+									<text class="count">{{ item.likes_count }}</text>
+								</view>
+								<view class="stat-item" v-if="item.collections_count > 0 || item.is_collection">
+									<text :class="['stat-icon', 'collect-icon', item.is_collection ? 'is-active' : '']">{{ item.is_collection ? '★' : '☆' }}</text>
+									<text class="count">{{ item.collections_count }}</text>
+								</view>
 							</view>
 						</view>
 					</view>
@@ -53,8 +65,8 @@
 
 		<view v-if="loading && list.length === 0" class="loading-state">加载中...</view>
 		<view v-if="!loading && list.length === 0" class="empty-state">
-			<view class="empty-icon">🔍</view>
-			<text>暂无发现，快去生成你的作品吧！</text>
+			<view class="empty-icon"></view>
+			<text class="empty-text">{{ my ? '你还没有发布过笔记呢' : '暂无发现，快去生成你的作品吧！' }}</text>
 			<button class="go-home-btn" @tap="goHome">去首页看看</button>
 		</view>
 		<view v-if="finished && list.length > 0" class="no-more">没有更多了</view>
@@ -63,6 +75,7 @@
 
 <script>
 	import { get } from '../../services/request.js'
+	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
 		data() {
@@ -98,6 +111,23 @@
 			}
 		},
 		methods: {
+			formattedAvatar(avatar) {
+				if (!avatar) return '/static/logo.png'
+				if (avatar.startsWith('http')) return avatar
+
+				const baseURL = API_CONFIG.baseURL
+				if (baseURL) {
+					const hostMatch = baseURL.match(/https?:\/\/([^\/]+)/)
+					const host = hostMatch ? hostMatch[1] : ''
+					if (host && avatar.includes(host)) {
+						return (avatar.startsWith('//') ? 'https:' : 'https://') + avatar.replace(/^https?:\/\//, '').replace(/^\/+/, '')
+					}
+					const base = baseURL.replace(/\/+$/, '')
+					const path = avatar.startsWith('/') ? avatar : '/' + avatar
+					return base + path
+				}
+				return avatar
+			},
 			refresh() {
 				console.log('Refreshing list...');
 				this.page = 1;
@@ -265,6 +295,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		gap: 10rpx;
 	}
 
 	.user {
@@ -272,7 +303,7 @@
 		align-items: center;
 		gap: 8rpx;
 		flex: 1;
-		overflow: hidden;
+		min-width: 0;
 	}
 
 	.avatar {
@@ -291,15 +322,30 @@
 		white-space: nowrap;
 	}
 
-	.likes {
+	.stats {
+		display: flex;
+		align-items: center;
+		gap: 12rpx;
+	}
+
+	.stat-item {
 		display: flex;
 		align-items: center;
 		gap: 4rpx;
 	}
 
-	.like-icon {
-		font-size: 20rpx;
+	.stat-icon {
+		font-size: 22rpx;
 		color: #999;
+		transition: all 0.2s ease;
+	}
+
+	.stat-icon.like-icon.is-active {
+		color: #e85a4f;
+	}
+
+	.stat-icon.collect-icon.is-active {
+		color: #ffb800;
 	}
 
 	.count {
@@ -307,16 +353,26 @@
 		color: #999;
 	}
 
-	.loading-state, .empty-state, .no-more {
-		text-align: center;
-		padding: 60rpx 40rpx;
-		font-size: 24rpx;
-		color: #999;
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 120rpx 60rpx;
 	}
 
 	.empty-icon {
-		font-size: 80rpx;
-		margin-bottom: 20rpx;
+		width: 160rpx;
+		height: 160rpx;
+		background-color: #eee;
+		margin-bottom: 40rpx;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3Cpath d='M8 9h8'/%3E%3Cpath d='M8 13h6'/%3E%3C/svg%3E") no-repeat center / contain;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3Cpath d='M8 9h8'/%3E%3Cpath d='M8 13h6'/%3E%3C/svg%3E") no-repeat center / contain;
+	}
+
+	.empty-text {
+		font-size: 26rpx;
+		color: #bbb;
+		margin-bottom: 40rpx;
 	}
 
 	.go-home-btn {
@@ -329,4 +385,25 @@
 		font-size: 26rpx;
 		border-radius: 35rpx;
 	}
+
+	.no-more {
+		text-align: center;
+		padding: 40rpx 0 80rpx;
+		font-size: 22rpx;
+		color: #ccc;
+		position: relative;
+	}
+
+	.no-more::before, .no-more::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		width: 60rpx;
+		height: 1rpx;
+		background: #eee;
+		margin-top: -20rpx;
+	}
+
+	.no-more::before { left: 200rpx; }
+	.no-more::after { right: 200rpx; }
 </style>

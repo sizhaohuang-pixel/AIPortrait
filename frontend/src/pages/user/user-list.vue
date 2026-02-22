@@ -2,7 +2,7 @@
 	<view class="page">
 		<view class="user-list" v-if="list.length > 0">
 			<view v-for="item in list" :key="item.id" class="user-item">
-				<image class="user-avatar" :src="targetUser(item).avatar || '/static/logo.png'"></image>
+				<image class="user-avatar" :src="formattedAvatar(targetUser(item).avatar)"></image>
 				<view class="user-info">
 					<text class="user-nickname">{{ targetUser(item).nickname || '匿名用户' }}</text>
 					<text class="user-mobile" v-if="targetUser(item).mobile">{{ maskMobile(targetUser(item).mobile) }}</text>
@@ -14,8 +14,8 @@
 
 		<view v-if="loading && list.length === 0" class="loading-state">加载中...</view>
 		<view v-if="!loading && list.length === 0" class="empty-state">
-			<view class="empty-icon">👥</view>
-			<text>{{ emptyText }}</text>
+			<view class="empty-icon"></view>
+			<text class="empty-text">{{ emptyText }}</text>
 		</view>
 		<view v-if="finished && list.length > 0" class="no-more">没有更多了</view>
 	</view>
@@ -23,6 +23,7 @@
 
 <script>
 	import { get, post } from '../../services/request.js'
+	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
 		data() {
@@ -99,6 +100,23 @@
 				} catch (e) {
 					console.error('Toggle follow failed:', e)
 				}
+			},
+			formattedAvatar(avatar) {
+				if (!avatar) return '/static/logo.png'
+				if (avatar.startsWith('http')) return avatar
+
+				const baseURL = API_CONFIG.baseURL
+				if (baseURL) {
+					const hostMatch = baseURL.match(/https?:\/\/([^\/]+)/)
+					const host = hostMatch ? hostMatch[1] : ''
+					if (host && avatar.includes(host)) {
+						return (avatar.startsWith('//') ? 'https:' : 'https://') + avatar.replace(/^https?:\/\//, '').replace(/^\/+/, '')
+					}
+					const base = baseURL.replace(/\/+$/, '')
+					const path = avatar.startsWith('/') ? avatar : '/' + avatar
+					return base + path
+				}
+				return avatar
 			}
 		}
 	}
@@ -167,13 +185,50 @@
 
 	.loading-state, .empty-state, .no-more {
 		text-align: center;
-		padding: 60rpx 40rpx;
+		padding: 120rpx 40rpx;
 		font-size: 24rpx;
 		color: #999;
 	}
 
-	.empty-icon {
-		font-size: 80rpx;
-		margin-bottom: 20rpx;
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 160rpx 60rpx;
 	}
+
+	.empty-icon {
+		width: 160rpx;
+		height: 160rpx;
+		background-color: #ddd;
+		margin-bottom: 40rpx;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M23 21v-2a4 4 0 0 0-3-3.87'/%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E") no-repeat center / contain;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M23 21v-2a4 4 0 0 0-3-3.87'/%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E") no-repeat center / contain;
+	}
+
+	.empty-text {
+		font-size: 26rpx;
+		color: #bbb;
+	}
+
+	.no-more {
+		text-align: center;
+		padding: 40rpx 0 80rpx;
+		font-size: 22rpx;
+		color: #ccc;
+		position: relative;
+	}
+
+	.no-more::before, .no-more::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		width: 60rpx;
+		height: 1rpx;
+		background: #eee;
+		margin-top: -20rpx;
+	}
+
+	.no-more::before { left: 200rpx; }
+	.no-more::after { right: 200rpx; }
 </style>

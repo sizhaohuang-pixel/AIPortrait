@@ -6,7 +6,10 @@
 
 ## 变更记录 (Changelog)
 
-### 2026-02-21 05:07:30
+### 2026-02-21 06:15:00
+- **✨ 增强：WechatMiniApp 登录能力升级**
+  - 新增 `getAccessToken` 接口，支持 AccessToken 自动缓存
+  - 新增 `getPhoneNumberNew` 接口，适配微信最新的手机号验证方案，彻底解决解密失败问题
 - **✨ 新增：社交发现接口**
   - `app/api/controller/Discovery.php` - 实现点赞、收藏、关注、评论等完整社交链路
 - **✨ 新增：AI 任务守护进程**

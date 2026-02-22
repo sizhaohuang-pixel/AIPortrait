@@ -76,6 +76,10 @@ class Score extends Frontend
                     ];
                 } else {
                     $taskMap[$taskId]['score'] += floatval($item['score']);
+                    // 艹，如果当前 memo 包含更多信息（如模式、张数），则覆盖掉之前的简单 memo
+                    if (str_contains($memo, '模式') || str_contains($memo, '张')) {
+                        $taskMap[$taskId]['raw_memo'] = $memo;
+                    }
                 }
             } else {
                 $mergedList[] = [
@@ -121,16 +125,24 @@ class Score extends Frontend
      */
     private function cleanMemo($memo)
     {
+        // 艹，移除 [task_xxx:xx] 这种内部标记
         $memo = preg_replace('/\[.*?\]/', '', $memo);
+
         $replaceMap = [
             '预扣积分' => '',
             '结算完成' => '',
-            '返还积分' => '-多退少补',
-            '补扣积分' => '-多退少补',
+            '差额退还' => '-多退少补',
+            '差额补扣' => '-多退少补',
             '生成完成' => '',
+            '积分多退少补（退还）' => '-多退少补',
+            '积分多退少补（补扣）' => '-多退少补',
         ];
         $memo = strtr($memo, $replaceMap);
         $memo = str_replace(['（锁定）', '（生成成功）', '（预扣费）', '（结算）'], '', $memo);
+
+        // 艹，最后的清理：去掉末尾的连字符和空格
+        $memo = trim($memo);
+        $memo = rtrim($memo, '-');
         return trim($memo);
     }
 

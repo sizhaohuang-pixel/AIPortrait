@@ -55,7 +55,8 @@
 		{
 			"path": "pages/mine/index",
 			"style": {
-				"navigationBarTitleText": "我的"
+				"navigationBarTitleText": "我的",
+				"navigationBarBackgroundColor": "#FFFFFF"
 			}
 		},
 		{
@@ -152,8 +153,8 @@
 			{
 				"pagePath": "pages/discovery/index",
 				"text": "发现",
-				"iconPath": "static/icons/share.png",
-				"selectedIconPath": "static/icons/share.png"
+				"iconPath": "static/icons/discover.png",
+				"selectedIconPath": "static/icons/discover-active.png"
 			},
 			{
 				"pagePath": "pages/mine/index",

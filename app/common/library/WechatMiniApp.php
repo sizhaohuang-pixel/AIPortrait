@@ -63,6 +63,71 @@ class WechatMiniApp
     }
 
     /**
+     * 获取微信 AccessToken
+     * @throws Exception
+     */
+    public function getAccessToken(): string
+    {
+        $cacheKey = 'wechat_access_token_' . $this->appId;
+        $accessToken = cache($cacheKey);
+        if ($accessToken) {
+            return $accessToken;
+        }
+
+        $url = 'https://api.weixin.qq.com/cgi-bin/token';
+        $params = [
+            'grant_type' => 'client_credential',
+            'appid'      => $this->appId,
+            'secret'     => $this->appSecret,
+        ];
+
+        $response = $this->httpGet($url, $params);
+        $result = json_decode($response, true);
+
+        if (isset($result['errcode']) && $result['errcode'] != 0) {
+            throw new Exception($result['errmsg'] ?? '获取 AccessToken 失败', $result['errcode']);
+        }
+
+        $accessToken = $result['access_token'];
+        // 缓存有效期减去 10 分钟，防止临界点过期
+        cache($cacheKey, $accessToken, $result['expires_in'] - 600);
+
+        return $accessToken;
+    }
+
+    /**
+     * 获取微信手机号（新版接口，无需解密）
+     * @param string $code getPhoneNumber 返回的 code
+     * @return string 手机号
+     * @throws Exception
+     */
+    public function getPhoneNumberNew(string $code): string
+    {
+        $accessToken = $this->getAccessToken();
+        $url = 'https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=' . $accessToken;
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['code' => $code]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $result = json_decode($response, true);
+
+        if (isset($result['errcode']) && $result['errcode'] != 0) {
+            throw new Exception($result['errmsg'] ?? '获取手机号失败', $result['errcode']);
+        }
+
+        return $result['phone_info']['phoneNumber'];
+    }
+
+    /**
      * 解密微信加密数据（手机号、用户信息等）
      *
      * @param string $sessionKey 会话密钥

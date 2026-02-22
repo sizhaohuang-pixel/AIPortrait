@@ -33,7 +33,7 @@ class Portrait extends Frontend
 
     /**
      * 转换图片URL为完整路径
-     * 老王提示：这个SB方法把相对路径转换成完整URL
+     * 老王提示：这个SB方法把相对路径转换成完整URL，并且干掉该死的 localhost
      */
     private function convertImageUrl($url)
     {
@@ -44,6 +44,22 @@ class Portrait extends Frontend
         // 艹，多解码几次，彻底把 &amp; 这种脏东西干掉
         $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // 艹，先把 localhost 给换成真正的请求域名（针对本地开发环境）
+        if (str_contains($url, 'localhost') || str_contains($url, '127.0.0.1')) {
+            // 尝试获取请求头里的 Host 或者当前域名
+            $realHost = $this->request->host();
+
+            // 艹，如果 host 还是 localhost，说明你这服务跑得太死板了
+            // 尝试用 URL 里的协议补全逻辑来保底
+            $url = preg_replace('/(localhost|127\.0\.0\.1)(:\d+)?/', $realHost, $url);
+
+            // 艹，如果后端是 http，强制把 https 降级回 http，否则本地开发会加载失败
+            $scheme = $this->request->scheme();
+            if ($scheme === 'http' && str_starts_with($url, 'https://')) {
+                $url = 'http' . substr($url, 5);
+            }
+        }
 
         // 艹，强制补全协议！原生预览组件对 // 这种协议相对路径支持极差
         if (str_starts_with($url, '//')) {

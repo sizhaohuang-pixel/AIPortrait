@@ -58,7 +58,7 @@ class Account extends Frontend
     {
         if ($this->request->isPost()) {
             $model = $this->auth->getUser();
-            $data  = $this->request->only(['avatar', 'username', 'nickname', 'gender', 'birthday', 'motto']);
+            $data  = $this->request->only(['avatar', 'nickname', 'gender', 'birthday', 'motto']);
 
             $data['id'] = $this->auth->id;
             if (!isset($data['birthday'])) {
@@ -70,6 +70,16 @@ class Account extends Frontend
                 $validate->scene('edit')->check($data);
             } catch (Throwable $e) {
                 $this->error($e->getMessage());
+            }
+
+            // 艹，如果存的是完整本地 URL（带 localhost 的），强行给它漂白成相对路径
+            // 这样以后访问时可以通过统一的转换逻辑来处理，别把烂域名存在数据库里
+            if (!empty($data['avatar']) && (str_contains($data['avatar'], 'localhost') || str_contains($data['avatar'], '127.0.0.1') || str_starts_with($data['avatar'], 'http'))) {
+                $parseUrl = parse_url($data['avatar']);
+                if (isset($parseUrl['path'])) {
+                    // 只要路径部分，去掉域名和协议
+                    $data['avatar'] = $parseUrl['path'];
+                }
             }
 
             $model->startTrans();

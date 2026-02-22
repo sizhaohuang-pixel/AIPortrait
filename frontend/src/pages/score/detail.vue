@@ -278,12 +278,30 @@
 	}
 
 	.no-more {
-		padding: 40rpx 0;
+		padding: 40rpx 0 80rpx;
 		text-align: center;
+		position: relative;
 	}
 
 	.no-more-text {
 		font-size: 22rpx;
 		color: #c0b8b2;
+		position: relative;
+		z-index: 1;
+		background: transparent;
+		padding: 0 20rpx;
 	}
+
+	.no-more::before, .no-more::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		width: 60rpx;
+		height: 1rpx;
+		background: #e6ded8;
+		margin-top: -20rpx;
+	}
+
+	.no-more::before { left: 200rpx; }
+	.no-more::after { right: 200rpx; }
 </style>

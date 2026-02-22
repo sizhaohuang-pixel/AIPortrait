@@ -54,8 +54,8 @@
 
 		<view v-if="loading && list.length === 0" class="loading-state">加载中...</view>
 		<view v-if="!loading && list.length === 0" class="empty-state">
-			<view class="empty-icon">📝</view>
-			<text>你还没有发布过笔记哦</text>
+			<view class="empty-icon"></view>
+			<text class="empty-text">你还没有发布过笔记哦</text>
 			<button class="go-home-btn" @tap="goHome">去首页生成作品</button>
 		</view>
 		<view v-if="finished && list.length > 0" class="no-more">没有更多了</view>
@@ -295,17 +295,26 @@
 		color: #ff4d4f;
 	}
 
-	.loading-state, .empty-state, .no-more {
-		text-align: center;
-		padding: 80rpx 40rpx;
-		font-size: 24rpx;
-		color: #999;
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 160rpx 60rpx;
 	}
 
 	.empty-icon {
-		font-size: 100rpx;
-		margin-bottom: 24rpx;
-		display: block;
+		width: 160rpx;
+		height: 160rpx;
+		background-color: #ddd;
+		margin-bottom: 40rpx;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'/%3E%3Cpath d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'/%3E%3C/svg%3E") no-repeat center / contain;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'/%3E%3Cpath d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'/%3E%3C/svg%3E") no-repeat center / contain;
+	}
+
+	.empty-text {
+		font-size: 26rpx;
+		color: #bbb;
+		margin-bottom: 40rpx;
 	}
 
 	.go-home-btn {
@@ -319,4 +328,25 @@
 		border-radius: 40rpx;
 		border: none;
 	}
+
+	.no-more {
+		text-align: center;
+		padding: 40rpx 0 80rpx;
+		font-size: 22rpx;
+		color: #ccc;
+		position: relative;
+	}
+
+	.no-more::before, .no-more::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		width: 60rpx;
+		height: 1rpx;
+		background: #eee;
+		margin-top: -20rpx;
+	}
+
+	.no-more::before { left: 200rpx; }
+	.no-more::after { right: 200rpx; }
 </style>

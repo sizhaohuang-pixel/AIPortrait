@@ -2,7 +2,7 @@
 	<view class="page">
 		<view class="header">
 			<view class="user-info">
-				<image class="avatar" :src="note.user.avatar || '/static/images/avatar.png'"></image>
+				<image class="avatar" :src="formattedAvatar(note.user.avatar)"></image>
 				<text class="nickname">{{ note.user.nickname }}</text>
 			</view>
 			<button v-if="!isMyNote" :class="['follow-btn', is_follow ? 'is-followed' : '']" @tap="toggleFollow">
@@ -24,7 +24,7 @@
 		<view class="comment-section">
 			<view class="section-title">共 {{ note.comments_count }} 条评论</view>
 			<view v-for="item in comments" :key="item.id" class="comment-item">
-				<image class="c-avatar" :src="item.user.avatar || '/static/images/avatar.png'"></image>
+				<image class="c-avatar" :src="formattedAvatar(item.user.avatar)"></image>
 				<view class="c-body">
 					<view class="c-user">{{ item.user.nickname }}</view>
 					<view class="c-content">{{ item.content }}</view>
@@ -42,11 +42,11 @@
 			<view class="input-box" @tap="showCommentInput = true">说点什么...</view>
 			<view class="actions">
 				<view class="action-item" @tap="toggleLike">
-					<text :class="['action-icon', is_like ? 'is-active' : '']">❤</text>
+					<text :class="['action-icon', 'like-icon', is_like ? 'is-active' : '']">{{ is_like ? '❤' : '♡' }}</text>
 					<text class="action-count">{{ note.likes_count }}</text>
 				</view>
 				<view class="action-item" @tap="toggleCollection">
-					<text :class="['action-icon', is_collection ? 'is-active' : '']">⭐</text>
+					<text :class="['action-icon', 'collect-icon', is_collection ? 'is-active' : '']">{{ is_collection ? '★' : '☆' }}</text>
 					<text class="action-count">{{ note.collections_count }}</text>
 				</view>
 				<button class="action-item share-btn" open-type="share">
@@ -69,6 +69,7 @@
 <script>
 	import { get, post } from '../../services/request.js'
 	import { requireLogin, getUserInfo } from '../../utils/auth.js'
+	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
 		data() {
@@ -209,6 +210,23 @@
 				uni.previewImage({
 					urls: [this.note.image_url]
 				})
+			},
+			formattedAvatar(avatar) {
+				if (!avatar) return '/static/images/avatar.png'
+				if (avatar.startsWith('http')) return avatar
+
+				const baseURL = API_CONFIG.baseURL
+				if (baseURL) {
+					const hostMatch = baseURL.match(/https?:\/\/([^\/]+)/)
+					const host = hostMatch ? hostMatch[1] : ''
+					if (host && avatar.includes(host)) {
+						return (avatar.startsWith('//') ? 'https:' : 'https://') + avatar.replace(/^https?:\/\//, '').replace(/^\/+/, '')
+					}
+					const base = baseURL.replace(/\/+$/, '')
+					const path = avatar.startsWith('/') ? avatar : '/' + avatar
+					return base + path
+				}
+				return avatar
 			},
 			formatTime(timestamp) {
 				const date = new Date(timestamp * 1000)
@@ -427,13 +445,18 @@
 	}
 
 	.action-icon {
-		font-size: 40rpx;
+		font-size: 44rpx;
 		color: #333;
 		margin-bottom: 4rpx;
+		transition: all 0.2s ease;
 	}
 
-	.action-icon.is-active {
+	.action-icon.like-icon.is-active {
 		color: #e85a4f;
+	}
+
+	.action-icon.collect-icon.is-active {
+		color: #ffb800;
 	}
 
 	.action-count {

@@ -1225,10 +1225,9 @@ class TaskProcessor
             }
 
             // 艹，获取任务信息来确定模式
-            if ($mode === null) {
-                $task = AiTask::find($taskId);
-                $mode = $task ? $task->mode : 1;
-            }
+            $task = AiTask::find($taskId);
+            $mode = $task ? $task->mode : 1;
+            $modeText = $mode == 2 ? '专业' : '梦幻';
 
             // 艹，计算实际消费金额
             $baseCost = floatval(ScoreConfig::getConfigValue('generate_cost', 10));
@@ -1273,7 +1272,7 @@ class TaskProcessor
                         'score' => $delta,
                         'before' => $before,
                         'after' => $after,
-                        'memo' => "生成AI写真-积分多退少补（退还） {$settleMark}",
+                        'memo' => "生成AI写真-{$modeText}模式-差额退还 {$settleMark}",
                     ]);
                 } elseif ($delta < 0) {
                     // 艹，补扣差额（理论极少）
@@ -1290,7 +1289,7 @@ class TaskProcessor
                         'score' => -$extraConsume,
                         'before' => $before,
                         'after' => $after,
-                        'memo' => "生成AI写真-积分多退少补（补扣） {$settleMark}",
+                        'memo' => "生成AI写真-{$modeText}模式-差额补扣 {$settleMark}",
                     ]);
                 } else {
                     // 艹，金额刚好，写0分幂等标记
@@ -1299,7 +1298,7 @@ class TaskProcessor
                         'score' => 0,
                         'before' => $currentScore,
                         'after' => $currentScore,
-                        'memo' => "生成AI写真-生成完成 {$settleMark}",
+                        'memo' => "生成AI写真-{$modeText}模式-生成完成 {$settleMark}",
                     ]);
                 }
             } else {
@@ -1317,7 +1316,7 @@ class TaskProcessor
                         'score' => -$actualAmount,
                         'before' => $before,
                         'after' => $after,
-                        'memo' => "生成AI写真 {$successCount}张 {$settleMark}",
+                        'memo' => "生成AI写真-{$modeText}模式-{$successCount}张 {$settleMark}",
                     ]);
                 } else {
                     UserScoreLog::create([
@@ -1325,7 +1324,7 @@ class TaskProcessor
                         'score' => 0,
                         'before' => $currentScore,
                         'after' => $currentScore,
-                        'memo' => "生成AI写真结算完成 {$settleMark}",
+                        'memo' => "生成AI写真-{$modeText}模式-结算完成 {$settleMark}",
                     ]);
                 }
             }

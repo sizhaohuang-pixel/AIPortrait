@@ -79,8 +79,10 @@ class User extends Frontend
             }
 
             if (isset($res) && $res === true) {
+                $userInfo = $this->auth->getUserInfo();
+                $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
                 $this->success(__('Login succeeded!'), [
-                    'userInfo'  => $this->auth->getUserInfo(),
+                    'userInfo'  => $userInfo,
                     'routePath' => '/user'
                 ]);
             } else {
@@ -178,8 +180,10 @@ class User extends Frontend
             }
 
             // 登录成功，返回用户信息和 Token
+            $userInfo = $this->auth->getUserInfo();
+            $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
             $this->success(__('登录成功'), [
-                'userInfo'  => $this->auth->getUserInfo(),
+                'userInfo'  => $userInfo,
                 'routePath' => '/user'
             ]);
         }
@@ -207,10 +211,10 @@ class User extends Frontend
         }
 
         if ($this->request->isPost()) {
-            $params = $this->request->post(['code', 'encryptedData', 'iv']);
+            $params = $this->request->post(['code', 'nickname', 'avatar']);
 
             // 参数验证
-            if (empty($params['code']) || empty($params['encryptedData']) || empty($params['iv'])) {
+            if (empty($params['code'])) {
                 $this->error(__('参数错误'));
             }
 
@@ -218,29 +222,32 @@ class User extends Frontend
                 // 使用微信工具类
                 $wechat = new \app\common\library\WechatMiniApp();
 
-                // 1. 通过 code 换取 session_key 和 openid
-                $sessionData = $wechat->code2Session($params['code']);
-                $sessionKey = $sessionData['session_key'];
+                // 艹，改用新版手机号验证，彻底解决解密失败问题
+                $mobile = $wechat->getPhoneNumberNew($params['code']);
 
-                // 2. 解密手机号
-                $mobile = $wechat->decryptPhoneNumber(
-                    $sessionKey,
-                    $params['encryptedData'],
-                    $params['iv']
-                );
-
-                // 3. 查询手机号是否已注册
+                // 查询手机号是否已注册
                 $userInfo = \app\common\model\User::where('mobile', $mobile)->find();
 
                 if (!$userInfo) {
                     // 手机号未注册，自动注册新用户
                     $username = 'u' . $mobile;
 
+                    // 艹，同步资料
+                    $extend = [];
+                    if (!empty($params['nickname'])) {
+                        $extend['nickname'] = $params['nickname'];
+                    }
+                    if (!empty($params['avatar'])) {
+                        $extend['avatar'] = $params['avatar'];
+                    }
+
                     $res = $this->auth->register(
-                        $username,          // username（u + 手机号）
-                        '',                 // password（空密码）
+                        $username,          // username
+                        '',                 // password
                         $mobile,            // mobile
-                        ''                  // email
+                        '',                 // email
+                        1,                  // group_id
+                        $extend             // extend
                     );
 
                     if ($res !== true) {
@@ -249,7 +256,20 @@ class User extends Frontend
                         $this->error($msg);
                     }
                 } else {
-                    // 手机号已注册，直接登录
+                    // 老用户静默更新资料（如果是默认昵称的话）
+                    $isUpdated = false;
+                    if ((empty($userInfo->nickname) || preg_match('/1[3-9]\d\*\*\*\*\d{4}/', $userInfo->nickname)) && !empty($params['nickname'])) {
+                        $userInfo->nickname = $params['nickname'];
+                        $isUpdated = true;
+                    }
+                    if (empty($userInfo->avatar) && !empty($params['avatar'])) {
+                        $userInfo->avatar = $params['avatar'];
+                        $isUpdated = true;
+                    }
+                    if ($isUpdated) {
+                        $userInfo->save();
+                    }
+
                     $res = $this->auth->direct($userInfo->id);
 
                     if ($res !== true) {
@@ -260,15 +280,15 @@ class User extends Frontend
                 }
 
                 // 登录成功，返回用户信息和 Token
+                $userInfo = $this->auth->getUserInfo();
+                $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
                 $this->success(__('登录成功'), [
-                    'userInfo'  => $this->auth->getUserInfo(),
+                    'userInfo'  => $userInfo,
                     'routePath' => '/user'
                 ]);
             } catch (\think\exception\HttpResponseException $e) {
-                // ThinkPHP 的正常响应异常，直接抛出
                 throw $e;
             } catch (\Exception $e) {
-                // 其他异常，返回错误信息
                 $this->error($e->getMessage() ?: '微信登录失败，请稍后重试');
             }
         }
@@ -302,13 +322,24 @@ class User extends Frontend
         // 统计关注数
         $followCount = \app\common\model\UserFollow::where('user_id', $userId)->count();
 
+        // 统计我点赞过的笔记数
+        $myLikesCount = \app\common\model\DiscoveryLike::where('user_id', $userId)->count();
+
+        // 统计我收藏过的笔记数
+        $myCollectionsCount = \app\common\model\DiscoveryCollection::where('user_id', $userId)->count();
+
+        $userInfo = $this->auth->getUserInfo();
+        $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
+
         $this->success('', [
-            'userInfo' => $this->auth->getUserInfo(),
+            'userInfo' => $userInfo,
             'stats' => [
                 'received_likes' => intval($receivedLikes),
                 'received_collections' => intval($receivedCollections),
                 'fans_count' => intval($fansCount),
-                'follow_count' => intval($followCount)
+                'follow_count' => intval($followCount),
+                'my_likes_count' => intval($myLikesCount),
+                'my_collections_count' => intval($myCollectionsCount)
             ]
         ]);
     }
@@ -438,6 +469,11 @@ class User extends Frontend
     {
         if (empty($url)) return '';
         if (str_starts_with($url, 'http')) return $url;
+        // 艹，如果已经带了域名但没协议（比如 www.bbhttp.com/storage...）
+        $domain = $this->request->host();
+        if (str_starts_with(ltrim($url, '/'), $domain)) {
+            return 'https://' . ltrim($url, '/');
+        }
 
         $domainWithProtocol = $this->request->domain();
         if (!str_starts_with($domainWithProtocol, 'http')) {

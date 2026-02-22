@@ -30,16 +30,16 @@ export async function mobileLogin(mobile, captcha) {
 
 /**
  * 微信小程序授权登录
- * @param {string} code - wx.login() 获取的 code
- * @param {string} encryptedData - 加密数据
- * @param {string} iv - 初始向量
+ * @param {string} code - getPhoneNumber 返回的 code
+ * @param {string} nickname - 微信昵称
+ * @param {string} avatar - 微信头像
  * @returns {Promise<object>} userInfo
  */
-export async function wechatLogin(code, encryptedData, iv) {
+export async function wechatLogin(code, nickname = '', avatar = '') {
 	const data = await post('/api/user/wechatLogin', {
 		code,
-		encryptedData,
-		iv
+		nickname,
+		avatar
 	})
 	// 后端返回 { userInfo: {...}, routePath: "..." }
 	// 我们只返回 userInfo

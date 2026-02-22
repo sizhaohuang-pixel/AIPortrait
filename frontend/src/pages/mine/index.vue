@@ -1,181 +1,209 @@
 <template>
 	<view class="page">
-		<view class="profile-card">
-			<view class="avatar" :class="{ 'has-image': hasValidAvatar }" :style="hasValidAvatar ? { backgroundImage: `url(${userInfo.avatar})` } : {}" @tap="goEditProfile">
-				<text v-show="!hasValidAvatar" class="avatar-text">{{ avatarText }}</text>
-			</view>
-			<view class="profile-info" @tap="goEditProfile">
-				<view class="name">{{ isLogin ? userInfo.nickname : '未登录' }}</view>
-				<view class="sub">{{ isLogin ? userInfo.mobile : '登录后同步历史与作品' }}</view>
-			</view>
-			<button v-if="!isLogin" class="login-btn" @tap="goLogin">登录</button>
-			<button v-else class="logout-btn" @tap="handleLogout">退出</button>
-		</view>
+		<!-- 艹，顶部背景装饰：改用极简白色/浅灰 -->
+		<view class="header-bg"></view>
 
-		<!-- 艹，积分余额卡片 -->
-		<view v-if="isLogin" class="score-card" @tap="goScoreDetail">
-			<view class="score-header">
-				<view class="score-title">我的积分</view>
-				<view class="score-action">
-					<text class="score-action-text">明细</text>
-					<text class="score-action-arrow">›</text>
+		<!-- 艹，用户头部面板：回归原生导航，去掉沉浸式适配 -->
+		<view class="user-header">
+			<view class="profile-section" @tap="goEditProfile">
+				<view class="avatar-wrapper">
+					<view class="avatar" :class="{ 'has-image': hasValidAvatar }" :style="hasValidAvatar ? { backgroundImage: `url(${formattedAvatar})` } : {}">
+						<text v-show="!hasValidAvatar" class="avatar-text">{{ avatarText }}</text>
+					</view>
+					<view v-if="isLogin" class="edit-badge"></view>
+				</view>
+				<view class="user-info">
+					<view class="name-row">
+						<text class="name">{{ isLogin ? userInfo.nickname : '未登录用户' }}</text>
+					</view>
+					<view v-if="isLogin && (userStats.received_likes > 0 || userStats.received_collections > 0)" class="prestige-row">
+						<text class="prestige-item">获赞 {{ userStats.received_likes || 0 }}</text>
+						<text class="prestige-item">收藏 {{ userStats.received_collections || 0 }}</text>
+					</view>
+					<text class="sub">{{ isLogin ? formatMobile(userInfo.mobile) : '登录享受 AI 肖像生成服务' }}</text>
+				</view>
+				<view v-if="!isLogin" class="login-action" @tap.stop="goLogin">
+					<text>点击登录</text>
+					<text class="arrow">›</text>
 				</view>
 			</view>
-			<view class="score-content">
-				<view class="score-value">{{ scoreInfo.score || 0 }}</view>
-				<view class="score-expire" v-if="scoreInfo.expire_time > 0">
-					{{ scoreInfo.expire_days }}天后过期
-				</view>
-			</view>
-			<button class="recharge-btn" @tap.stop="goRecharge">充值</button>
-		</view>
 
-		<!-- 艹，社交统计 -->
-		<view v-if="isLogin" class="stats-bar">
-			<view class="stats-item" @tap="goSocialList('note', 'likes')">
-				<text class="stats-value">{{ userStats.received_likes || 0 }}</text>
-				<text class="stats-label">获赞</text>
-			</view>
-			<view class="stats-item" @tap="goSocialList('note', 'collections')">
-				<text class="stats-value">{{ userStats.received_collections || 0 }}</text>
-				<text class="stats-label">收藏</text>
-			</view>
-			<view class="stats-item" @tap="goSocialList('user', 'fans')">
-				<text class="stats-value">{{ userStats.fans_count || 0 }}</text>
-				<text class="stats-label">粉丝</text>
-			</view>
-			<view class="stats-item" @tap="goSocialList('user', 'follows')">
-				<text class="stats-value">{{ userStats.follow_count || 0 }}</text>
-				<text class="stats-label">关注</text>
-			</view>
-		</view>
-
-		<view class="section">
-			<view class="section-title">常用</view>
-			<view class="list">
-				<view class="list-item" @tap="goHistory">
-					<view class="item-title">我的相册</view>
-					<view class="item-desc">查看我生成的作品</view>
+			<!-- 艹，统计数据栏：极简灰黑色调 -->
+			<view v-if="isLogin" class="stats-row">
+				<view class="stats-item" @tap="goSocialList('note', 'likes')">
+					<text class="stats-value">{{ userStats.my_likes_count || 0 }}</text>
+					<text class="stats-label">点赞</text>
 				</view>
-				<view class="list-item" @tap="goMyNotes">
-					<view class="item-title">我的笔记</view>
-					<view class="item-desc">查看我发布的动态</view>
+				<view class="stats-item" @tap="goSocialList('note', 'collections')">
+					<text class="stats-value">{{ userStats.my_collections_count || 0 }}</text>
+					<text class="stats-label">收藏</text>
+				</view>
+				<view class="stats-item" @tap="goSocialList('user', 'fans')">
+					<text class="stats-value">{{ userStats.fans_count || 0 }}</text>
+					<text class="stats-label">粉丝</text>
+				</view>
+				<view class="stats-item" @tap="goSocialList('user', 'follows')">
+					<text class="stats-value">{{ userStats.follow_count || 0 }}</text>
+					<text class="stats-label">关注</text>
 				</view>
 			</view>
 		</view>
 
-		<view class="section">
-			<view class="section-title">关于</view>
-			<view class="list">
-				<view class="list-item" @tap="goAgreement('about')">
-					<view class="item-title">关于我们</view>
+		<!-- 艹，积分权益卡片：极简黑白灰 -->
+		<view class="score-card-container">
+			<view class="score-card" @tap="goRecharge">
+				<view class="score-main">
+					<view class="score-label">可用积分</view>
+					<view class="score-value">{{ isLogin ? (scoreInfo.score || 0) : '--' }}</view>
+					<view v-if="isLogin && scoreInfo.expire_time > 0" class="score-hint">
+						{{ scoreInfo.expire_days }}天后过期
+					</view>
 				</view>
-				<view class="list-item" @tap="goAgreement('privacy')">
-					<view class="item-title">隐私政策</view>
-				</view>
-				<view class="list-item" @tap="goAgreement('user')">
-					<view class="item-title">用户协议</view>
+				<view class="score-btn">
+					<text>充值</text>
 				</view>
 			</view>
+		</view>
+
+		<!-- 艹，业务列表：回归极简风格 -->
+		<view class="menu-section">
+			<view class="menu-list">
+				<view class="menu-item" @tap="goHistory">
+					<view class="item-left">
+						<view class="item-icon icon-album"></view>
+						<text>我的相册</text>
+					</view>
+					<view class="item-right">
+						<text class="item-desc">生成记录</text>
+						<text class="item-arrow">›</text>
+					</view>
+				</view>
+				<view class="menu-item" @tap="goMyNotes">
+					<view class="item-left">
+						<view class="item-icon icon-note"></view>
+						<text>我的笔记</text>
+					</view>
+					<view class="item-right">
+						<text class="item-desc">发布内容</text>
+						<text class="item-arrow">›</text>
+					</view>
+				</view>
+				<view class="menu-item" @tap="goScoreDetail">
+					<view class="item-left">
+						<view class="item-icon icon-detail"></view>
+						<text>积分明细</text>
+					</view>
+					<view class="item-right">
+						<text class="item-arrow">›</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 艹，辅助设置 -->
+		<view class="menu-section">
+			<view class="menu-list">
+				<view class="menu-item" @tap="goAgreement('about')">
+					<view class="item-left">
+						<view class="item-icon icon-info"></view>
+						<text>关于我们</text>
+					</view>
+					<view class="item-right"><text class="item-arrow">›</text></view>
+				</view>
+				<view class="menu-item" @tap="goAgreement('privacy')">
+					<view class="item-left">
+						<view class="item-icon icon-privacy"></view>
+						<text>隐私政策</text>
+					</view>
+					<view class="item-right"><text class="item-arrow">›</text></view>
+				</view>
+				<view v-if="isLogin" class="menu-item logout-item" @tap="handleLogout">
+					<view class="item-left">
+						<view class="item-icon icon-logout"></view>
+						<text>退出登录</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<view class="footer">
+			<text>AIPortrait v1.2.2</text>
 		</view>
 	</view>
 </template>
 
 <script>
-	import { isLogin, getUserInfo, requireLogin, logout } from '../../utils/auth.js'
+	import { isLogin, getUserInfo, requireLogin, logout, saveLoginInfo } from '../../utils/auth.js'
 	import { get } from '../../services/request.js'
+	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
 		data() {
 			return {
 				isLogin: false,
-				userInfo: {
-					nickname: '',
-					mobile: '',
-					avatar: ''
-				},
-				// 艹，积分信息
-				scoreInfo: {
-					score: 0,
-					expire_time: 0,
-					expire_days: 0
-				},
-				// 艹，社交统计
-				userStats: {
-					received_likes: 0,
-					received_collections: 0,
-					fans_count: 0,
-					follow_count: 0
-				}
+				userInfo: { nickname: '', mobile: '', avatar: '' },
+				scoreInfo: { score: 0, expire_time: 0, expire_days: 0 },
+				userStats: { received_likes: 0, received_collections: 0, fans_count: 0, follow_count: 0 }
 			}
 		},
 		computed: {
-			// 艹，生成头像显示文字
 			avatarText() {
-				if (!this.isLogin) {
-					return '未'
-				}
-
-				// 艹，优先用手机号后两位，更有辨识度
-				if (this.userInfo.mobile && this.userInfo.mobile.length >= 2) {
-					return this.userInfo.mobile.slice(-2)
-				}
-
-				// 艹，如果昵称不是默认的 user_ 开头，就显示首字母
-				if (this.userInfo.nickname && !this.userInfo.nickname.startsWith('user_')) {
-					return this.userInfo.nickname.charAt(0)
-				}
-
+				if (!this.isLogin) return '未'
+				if (this.userInfo.mobile && this.userInfo.mobile.length >= 2) return this.userInfo.mobile.slice(-2)
+				if (this.userInfo.nickname && !this.userInfo.nickname.startsWith('user_')) return this.userInfo.nickname.charAt(0)
 				return '用'
 			},
-			// 艹，判断是否有有效头像
 			hasValidAvatar() {
-				// 艹，/static/images/avatar.png 是默认头像，不算有效头像
 				if (!this.userInfo.avatar) return false
 				if (this.userInfo.avatar === '/static/images/avatar.png') return false
 				if (this.userInfo.avatar.startsWith('/static/')) return false
 				return this.userInfo.avatar.length > 0
+			},
+			// 艹，格式化头像地址，确保带上域名
+			formattedAvatar() {
+				if (!this.hasValidAvatar) return ''
+				let avatar = this.userInfo.avatar
+				// 艹，如果已经是完整地址，直接滚蛋，别瞎拼
+				if (avatar.startsWith('http')) return avatar
+
+				// 艹，核心补丁：如果地址里已经包含了域名（比如 www.bbhttp.com/storage...）
+				const baseURL = API_CONFIG.baseURL
+				if (baseURL) {
+					const hostMatch = baseURL.match(/https?:\/\/([^\/]+)/)
+					const host = hostMatch ? hostMatch[1] : ''
+					if (host && avatar.includes(host)) {
+						// 已经有域名了，补齐协议就行
+						return (avatar.startsWith('//') ? 'https:' : 'https://') + avatar.replace(/^https?:\/\//, '').replace(/^\/+/, '')
+					}
+
+					// 纯相对路径，拼上 baseURL
+					const base = baseURL.replace(/\/+$/, '')
+					const path = avatar.startsWith('/') ? avatar : '/' + avatar
+					return base + path
+				}
+				return avatar
 			}
 		},
 		onShow() {
-			// 每次显示页面时检查登录状态
 			this.checkLoginStatus()
-
-			// 艹，调试：打印 userInfo 看看里面有啥
-			console.log('=== userInfo 调试 ===')
-			console.log('isLogin:', this.isLogin)
-			console.log('userInfo:', JSON.stringify(this.userInfo, null, 2))
-			console.log('mobile:', this.userInfo.mobile)
-			console.log('nickname:', this.userInfo.nickname)
-			console.log('avatarText:', this.avatarText)
-			console.log('==================')
-
-			// 艹，如果已登录，获取积分信息和社交统计
 			if (this.isLogin) {
 				this.getScoreInfo()
 				this.getUserStats()
 			}
 		},
 		methods: {
-			// 检查登录状态
 			checkLoginStatus() {
 				this.isLogin = isLogin()
 				if (this.isLogin) {
-					this.userInfo = getUserInfo() || {
-						nickname: '',
-						mobile: '',
-						avatar: ''
-					}
+					this.userInfo = getUserInfo() || { nickname: '', mobile: '', avatar: '' }
 				} else {
-					this.userInfo = {
-						nickname: '',
-						mobile: '',
-						avatar: ''
-					}
+					this.userInfo = { nickname: '', mobile: '', avatar: '' }
 				}
 			},
-
-			// 艹，获取积分信息
+			formatMobile(m) {
+				if (!m) return ''
+				return m.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
+			},
 			async getScoreInfo() {
 				try {
 					const data = await get('/api/score/info')
@@ -184,73 +212,55 @@
 					console.error('获取积分信息失败:', error)
 				}
 			},
-
-			// 艹，获取社交统计
 			getUserStats() {
 				get('/api/user/info').then(res => {
 					this.userStats = res.stats
+					// 艹，顺便更新下用户信息，保证头像昵称是最新的
+					if (res.userInfo) {
+						this.userInfo = res.userInfo
+						// 艹，同步到本地存储，别处也能用到
+						saveLoginInfo({ ...res.userInfo, token: uni.getStorageSync('token') })
+					}
 				}).catch(error => {
 					console.error('获取社交统计失败:', error)
 				})
 			},
-
-			// 艹，跳转到社交列表页面
 			goSocialList(pageType, listType) {
 				if (!requireLogin()) return
-				const url = `/pages/user/${pageType}-list?type=${listType}`
-				uni.navigateTo({ url })
+				uni.navigateTo({ url: `/pages/user/${pageType}-list?type=${listType}` })
 			},
-
-			// 艹，跳转到积分明细页面
 			goScoreDetail() {
+				if (!requireLogin()) return
 				uni.navigateTo({ url: '/pages/score/detail' })
 			},
-
-			// 艹，跳转到充值页面
 			goRecharge() {
+				if (!requireLogin()) return
 				uni.navigateTo({ url: '/pages/score/recharge' })
 			},
-
 			goHistory() {
-				// 使用工具函数检查登录状态
-				if (!requireLogin()) {
-					return
-				}
+				if (!requireLogin()) return
 				uni.navigateTo({ url: '/pages/history/index' })
 			},
-
 			goMyNotes() {
-				if (!requireLogin()) {
-					return
-				}
-				// 艹，跳到专用的“我的笔记”页面，不再跳 TabBar 页面
+				if (!requireLogin()) return
 				uni.navigateTo({ url: '/pages/discovery/my' })
 			},
-
-			// 艹，跳转到协议页面
 			goAgreement(type) {
 				uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
 			},
-
 			goLogin() {
 				uni.navigateTo({ url: '/pages/login/index' })
 			},
-
-			// 艹，跳转到编辑资料页面
 			goEditProfile() {
-				// 使用工具函数检查登录状态
-				if (!requireLogin()) {
-					return
-				}
+				if (!requireLogin()) return
 				uni.navigateTo({ url: '/pages/profile/edit' })
 			},
-
-			// 退出登录
 			handleLogout() {
 				logout({
 					onSuccess: () => {
-						// 更新状态
 						this.checkLoginStatus()
+						this.scoreInfo = { score: 0, expire_time: 0, expire_days: 0 }
+						this.userStats = { received_likes: 0, received_collections: 0, fans_count: 0, follow_count: 0 }
 					}
 				})
 			}
@@ -258,247 +268,259 @@
 	}
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 	.page {
 		min-height: 100vh;
-		padding: 36rpx 28rpx 40rpx;
-		background: radial-gradient(circle at top, #fff7f2 0%, #f7f2ee 52%, #ffffff 100%);
-		color: #1f1a17;
-		font-family: "HarmonyOS Sans", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+		background-color: #f7f8fa;
+		padding-bottom: 60rpx;
 	}
 
-	.profile-card {
-		display: flex;
-		align-items: center;
-		gap: 20rpx;
-		padding: 26rpx;
-		background: #ffffff;
-		border-radius: 26rpx;
-		box-shadow: 0 16rpx 34rpx rgba(37, 30, 25, 0.08);
-		border: 1rpx solid #f0e6df;
-	}
-
-	.avatar {
-		width: 96rpx;
-		height: 96rpx;
-		border-radius: 50%;
-		background: linear-gradient(135deg, #fce8dc, #f4d7c8);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-	}
-
-	.avatar.has-image {
-		background-size: cover;
-		background-position: center;
-	}
-
-	.avatar-text {
-		font-size: 36rpx;
-		font-weight: 600;
-		color: #2b2521;
-		line-height: 1;
-		user-select: none;
-	}
-
-	.profile-info {
-		flex: 1;
-	}
-
-	.name {
-		font-size: 30rpx;
-		font-weight: 700;
-		color: #2b2521;
-	}
-
-	.sub {
-		margin-top: 6rpx;
-		font-size: 22rpx;
-		color: #7a6f69;
-	}
-
-	.login-btn {
-		background: #2b2521;
-		color: #ffffff;
-		font-size: 24rpx;
-		border-radius: 999rpx;
-		padding: 0 20rpx;
-	}
-
-	.logout-btn {
-		background: #f5f5f5;
-		color: #2b2521;
-		font-size: 24rpx;
-		border-radius: 999rpx;
-		padding: 0 20rpx;
-		border: 1rpx solid #e0e0e0;
-	}
-
-	.section {
-		margin-top: 28rpx;
-	}
-
-	.section-title {
-		font-size: 26rpx;
-		font-weight: 600;
-		margin-bottom: 14rpx;
-		color: #2b2521;
-	}
-
-	.list {
-		background: #ffffff;
-		border-radius: 22rpx;
-		overflow: hidden;
-		box-shadow: 0 12rpx 26rpx rgba(37, 30, 25, 0.06);
-		border: 1rpx solid #f0e6df;
-	}
-
-	.list-item {
-		padding: 22rpx 24rpx;
-		border-bottom: 1rpx solid #f1ebe6;
-	}
-
-	.list-item:last-child {
-		border-bottom: none;
-	}
-
-	.item-title {
-		font-size: 26rpx;
-		font-weight: 600;
-		color: #2b2521;
-	}
-
-	.item-desc {
-		margin-top: 6rpx;
-		font-size: 22rpx;
-		color: #9a8f88;
-	}
-
-	/* 艹，积分卡片样式 */
-	.score-card {
-		margin-top: 28rpx;
-		padding: 24rpx;
-		background: linear-gradient(135deg, #fef5ef 0%, #fce8dc 100%);
-		border-radius: 26rpx;
-		box-shadow: 0 16rpx 34rpx rgba(37, 30, 25, 0.08);
-		border: 1rpx solid #f0e6df;
-		position: relative;
-		overflow: hidden;
-	}
-
-	.score-card::before {
-		content: '';
+	/* 艹，顶部极简背景 */
+	.header-bg {
 		position: absolute;
-		top: -50%;
-		right: -20%;
-		width: 200rpx;
-		height: 200rpx;
-		background: radial-gradient(circle, rgba(252, 232, 220, 0.6) 0%, transparent 70%);
-		border-radius: 50%;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 320rpx;
+		background: #ffffff;
+		z-index: 0;
 	}
 
-	.score-header {
+	.user-header {
+		position: relative;
+		z-index: 1;
+		padding: 40rpx 40rpx 30rpx;
+		background: #ffffff;
+	}
+
+	.profile-section {
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 20rpx;
+		margin-bottom: 40rpx;
 	}
 
-	.score-title {
-		font-size: 24rpx;
-		color: #7a6f69;
+	.avatar-wrapper {
+		position: relative;
+		margin-right: 30rpx;
+
+		.avatar {
+			width: 120rpx;
+			height: 120rpx;
+			border-radius: 60rpx;
+			background: #f0f0f0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			overflow: hidden;
+			background-size: cover;
+			background-position: center;
+		}
+
+		.avatar-text {
+			font-size: 36rpx;
+			font-weight: bold;
+			color: #333;
+		}
+
+		.edit-badge {
+			position: absolute;
+			right: 0;
+			bottom: 0;
+			width: 32rpx;
+			height: 32rpx;
+			background: #333;
+			border-radius: 50%;
+			border: 4rpx solid #ffffff;
+
+			&::after {
+				content: '';
+				position: absolute;
+				top: 50%; left: 50%;
+				width: 12rpx; height: 12rpx;
+				background: #fff;
+				transform: translate(-50%, -50%);
+				clip-path: polygon(0% 100%, 100% 100%, 100% 0%);
+			}
+		}
+	}
+
+	.user-info {
+		flex: 1;
+		.name { font-size: 38rpx; font-weight: bold; color: #1a1a1a; }
+		.sub { font-size: 24rpx; color: #999; margin-top: 6rpx; display: block; }
+
+		.prestige-row {
+			display: flex;
+			gap: 20rpx;
+			margin-top: 8rpx;
+			.prestige-item {
+				font-size: 20rpx;
+				color: #666;
+				background: #f5f5f5;
+				padding: 4rpx 12rpx;
+				border-radius: 6rpx;
+			}
+		}
+	}
+
+	.login-action {
+		font-size: 26rpx;
+		color: #333;
+		background: #f0f0f0;
+		padding: 10rpx 24rpx;
+		border-radius: 30rpx;
 		font-weight: 500;
 	}
 
-	.score-action {
-		display: flex;
-		align-items: center;
-		gap: 4rpx;
-	}
-
-	.score-action-text {
-		font-size: 22rpx;
-		color: #9a8f88;
-	}
-
-	.score-action-arrow {
-		font-size: 32rpx;
-		color: #9a8f88;
-		line-height: 1;
-	}
-
-	.score-content {
-		margin-bottom: 20rpx;
-	}
-
-	.score-value {
-		font-size: 56rpx;
-		font-weight: 700;
-		color: #2b2521;
-		line-height: 1.2;
-	}
-
-	.score-expire {
-		margin-top: 8rpx;
-		font-size: 22rpx;
-		color: #9a8f88;
-	}
-
-	.recharge-btn {
-		background: #2b2521;
-		color: #ffffff;
-		font-size: 24rpx;
-		border-radius: 999rpx;
-		padding: 0 32rpx;
-		height: 56rpx;
-		line-height: 56rpx;
-		border: none;
-	}
-
-	.recharge-btn:active {
-		background: #3d3530;
-	}
-
-	/* 艹，社交统计样式 */
-	.stats-bar {
-		margin-top: 28rpx;
+	.stats-row {
 		display: flex;
 		justify-content: space-around;
-		padding: 30rpx 0;
-		background: #ffffff;
-		border-radius: 26rpx;
-		box-shadow: 0 12rpx 26rpx rgba(37, 30, 25, 0.06);
-		border: 1rpx solid #f0e6df;
+		border-top: 1rpx solid #f0f0f0;
+		padding-top: 30rpx;
 	}
 
 	.stats-item {
+		text-align: center;
+		.stats-value { font-size: 32rpx; font-weight: bold; color: #1a1a1a; display: block; }
+		.stats-label { font-size: 22rpx; color: #999; margin-top: 4rpx; }
+	}
+
+	/* 艹，积分卡片：简约设计 */
+	.score-card-container {
+		padding: 30rpx;
+	}
+
+	.score-card {
+		background: #1a1a1a;
+		border-radius: 24rpx;
+		padding: 40rpx;
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		flex: 1;
+		justify-content: space-between;
+		color: #ffffff;
 		position: relative;
+		overflow: hidden;
+
+		&::before {
+			content: '';
+			position: absolute;
+			top: -20rpx; right: -20rpx;
+			width: 120rpx; height: 120rpx;
+			background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 0%, transparent 70%);
+			pointer-events: none;
+		}
 	}
 
-	.stats-item:not(:last-child)::after {
-		content: '';
-		position: absolute;
-		right: 0;
-		top: 20%;
-		height: 60%;
-		width: 1rpx;
-		background: #f0e6df;
+	.score-main {
+		.score-label {
+			font-size: 24rpx;
+			opacity: 0.6;
+			margin-bottom: 8rpx;
+			display: flex;
+			align-items: center;
+
+			&::before {
+				content: '';
+				width: 24rpx; height: 24rpx;
+				margin-right: 12rpx;
+				background-color: #ffd700;
+				mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Cline x1='12' y1='8' x2='12' y2='16'/%3E%3Cline x1='8' y1='12' x2='16' y2='12'/%3E%3C/svg%3E") no-repeat center / contain;
+				-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Cline x1='12' y1='8' x2='12' y2='16'/%3E%3Cline x1='8' y1='12' x2='16' y2='12'/%3E%3C/svg%3E") no-repeat center / contain;
+			}
+		}
+		.score-value { font-size: 52rpx; font-weight: bold; line-height: 1; }
+		.score-hint { font-size: 20rpx; opacity: 0.4; margin-top: 10rpx; }
 	}
 
-	.stats-value {
-		font-size: 32rpx;
-		font-weight: 700;
-		color: #2b2521;
-		margin-bottom: 4rpx;
+	.score-btn {
+		background: #ffffff;
+		color: #1a1a1a;
+		padding: 14rpx 36rpx;
+		border-radius: 30rpx;
+		font-size: 24rpx;
+		font-weight: bold;
+		position: relative;
+		z-index: 10;
 	}
 
-	.stats-label {
-		font-size: 22rpx;
-		color: #9a8f88;
+	/* 艹，菜单列表 */
+	.menu-section {
+		margin-bottom: 20rpx;
+		padding: 0 30rpx;
+	}
+
+	.menu-list {
+		background: #ffffff;
+		border-radius: 24rpx;
+		overflow: hidden;
+	}
+
+	.menu-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 34rpx 30rpx;
+		border-bottom: 1rpx solid #f7f8fa;
+
+		&:last-child { border-bottom: none; }
+		&:active { background: #fafafa; }
+
+		.item-left {
+			display: flex;
+			align-items: center;
+			font-size: 28rpx;
+			color: #333;
+			font-weight: 500;
+
+			.item-icon {
+				width: 44rpx; height: 44rpx;
+				margin-right: 24rpx;
+				background-color: #333;
+				display: block;
+
+				&.icon-album {
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-note {
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14 2 14 8 20 8'/%3E%3Cline x1='16' y1='13' x2='8' y2='13'/%3E%3Cline x1='16' y1='17' x2='8' y2='17'/%3E%3Cline x1='10' y1='9' x2='8' y2='9'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14 2 14 8 20 8'/%3E%3Cline x1='16' y1='13' x2='8' y2='13'/%3E%3Cline x1='16' y1='17' x2='8' y2='17'/%3E%3Cline x1='10' y1='9' x2='8' y2='9'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-detail {
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='6' x2='21' y2='6'/%3E%3Cline x1='8' y1='12' x2='21' y2='12'/%3E%3Cline x1='8' y1='18' x2='21' y2='18'/%3E%3Cline x1='3' y1='6' x2='3.01' y2='6'/%3E%3Cline x1='3' y1='12' x2='3.01' y2='12'/%3E%3Cline x1='3' y1='18' x2='3.01' y2='18'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='6' x2='21' y2='6'/%3E%3Cline x1='8' y1='12' x2='21' y2='12'/%3E%3Cline x1='8' y1='18' x2='21' y2='18'/%3E%3Cline x1='3' y1='6' x2='3.01' y2='6'/%3E%3Cline x1='3' y1='12' x2='3.01' y2='12'/%3E%3Cline x1='3' y1='18' x2='3.01' y2='18'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-info {
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-privacy {
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-logout {
+					background-color: #ff5252;
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/%3E%3Cpolyline points='16 17 21 12 16 7'/%3E%3Cline x1='21' y1='12' x2='9' y2='12'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/%3E%3Cpolyline points='16 17 21 12 16 7'/%3E%3Cline x1='21' y1='12' x2='9' y2='12'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+			}
+		}
+
+		.item-right {
+			display: flex;
+			align-items: center;
+			.item-desc { font-size: 24rpx; color: #bbb; margin-right: 10rpx; }
+			.item-arrow { font-size: 32rpx; color: #ddd; line-height: 1; }
+		}
+	}
+
+	.logout-item {
+		.item-left { color: #ff5252; }
+	}
+
+	.footer {
+		text-align: center;
+		margin-top: 40rpx;
+		text { font-size: 20rpx; color: #ccc; letter-spacing: 1rpx; }
 	}
 </style>

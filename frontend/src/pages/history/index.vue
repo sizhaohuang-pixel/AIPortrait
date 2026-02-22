@@ -21,7 +21,11 @@
 				</view>
 			</view>
 		</view>
-		<view v-else class="empty">相册空空如也</view>
+		<view v-else class="empty-state">
+			<view class="empty-icon"></view>
+			<text class="empty-text">相册空空如也，快去生成写真吧</text>
+			<button class="go-home-btn" @tap="goHome">去看看模板</button>
+		</view>
 	</view>
 </template>
 
@@ -224,6 +228,10 @@
 				})
 			},
 
+			goHome() {
+				uni.switchTab({ url: '/pages/index/index' })
+			},
+
 			// 获取状态样式类
 			getStatusClass(item) {
 				if (item.status === 0) {
@@ -390,12 +398,59 @@
 		border: 1rpx solid #f2caca;
 	}
 
-	.empty {
-		margin-top: 120rpx;
-		text-align: center;
-		font-size: 24rpx;
-		color: #9a8f88;
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 160rpx 60rpx;
 	}
+
+	.empty-icon {
+		width: 160rpx;
+		height: 160rpx;
+		background-color: #ddd;
+		margin-bottom: 40rpx;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;
+	}
+
+	.empty-text {
+		font-size: 26rpx;
+		color: #bbb;
+		margin-bottom: 40rpx;
+	}
+
+	.go-home-btn {
+		width: 240rpx;
+		height: 70rpx;
+		line-height: 70rpx;
+		background: #2b2521;
+		color: #fff;
+		font-size: 26rpx;
+		border-radius: 35rpx;
+	}
+
+	.no-more {
+		text-align: center;
+		padding: 40rpx 0 80rpx;
+		font-size: 22rpx;
+		color: #ccc;
+		position: relative;
+		margin-top: 20rpx;
+	}
+
+	.no-more::before, .no-more::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		width: 60rpx;
+		height: 1rpx;
+		background: #eee;
+		margin-top: -20rpx;
+	}
+
+	.no-more::before { left: 200rpx; }
+	.no-more::after { right: 200rpx; }
 
 	@keyframes shine {
 		0% {

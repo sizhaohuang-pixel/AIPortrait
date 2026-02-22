@@ -54,12 +54,31 @@ class Discovery extends Frontend
 
         $list = $query->page($page, $limit)->select()->toArray();
 
+        // 艹，如果登录了，顺便查一下这些笔记我有没有点赞收藏过
+        $myLikes = [];
+        $myCollections = [];
+        if ($this->auth->isLogin()) {
+            $userId = $this->auth->id;
+            $noteIds = array_column($list, 'id');
+            if (!empty($noteIds)) {
+                $myLikes = DiscoveryLike::where('user_id', $userId)
+                    ->whereIn('note_id', $noteIds)
+                    ->column('note_id');
+                $myCollections = DiscoveryCollection::where('user_id', $userId)
+                    ->whereIn('note_id', $noteIds)
+                    ->column('note_id');
+            }
+        }
+
         // 转换图片路径
         foreach ($list as &$item) {
             $item['image_url'] = $this->convertImageUrl($item['image_url']);
             if (isset($item['user']['avatar'])) {
                 $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar']);
             }
+            // 艹，注入交互状态
+            $item['is_like'] = in_array($item['id'], $myLikes);
+            $item['is_collection'] = in_array($item['id'], $myCollections);
         }
 
         $total = DiscoveryNote::where('status', 1)->count();
@@ -388,19 +407,41 @@ class Discovery extends Frontend
             ->select()
             ->toArray();
 
+        // 艹，查一下这些笔记我有没有点赞收藏过
+        $myLikes = [];
+        $myCollections = [];
+        $noteIds = array_column($list, 'id');
+        if (!empty($noteIds)) {
+            $myLikes = DiscoveryLike::where('user_id', $userId)
+                ->whereIn('note_id', $noteIds)
+                ->column('note_id');
+            $myCollections = DiscoveryCollection::where('user_id', $userId)
+                ->whereIn('note_id', $noteIds)
+                ->column('note_id');
+        }
+
         foreach ($list as &$item) {
             $item['image_url'] = $this->convertImageUrl($item['image_url']);
+            if (isset($item['user']['avatar'])) {
+                $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar']);
+            }
+            $item['is_like'] = in_array($item['id'], $myLikes);
+            $item['is_collection'] = in_array($item['id'], $myCollections);
         }
 
         $total = DiscoveryNote::where('user_id', $userId)->count();
 
-        // 艹，顺便统计一下总获赞和总收藏，给用户打打气
+        // 统计总获赞和总收藏
         $totalLikes = DiscoveryNote::where('user_id', $userId)->sum('likes_count');
         $totalCollections = DiscoveryNote::where('user_id', $userId)->sum('collections_count');
+
+        $userInfo = $this->auth->getUserInfo();
+        $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
 
         return $this->success('获取成功', [
             'list' => $list,
             'total' => $total,
+            'userInfo' => $userInfo,
             'stats' => [
                 'total_likes' => intval($totalLikes),
                 'total_collections' => intval($totalCollections)
@@ -444,17 +485,51 @@ class Discovery extends Frontend
     }
 
     /**
-     * 转换图片URL为完整路径（从 Portrait 搬过来的，保持一致）
+     * 转换图片URL为完整路径
+     * 老王提示：这个SB方法把相对路径转换成完整URL，并且干掉该死的 localhost
      */
     private function convertImageUrl($url)
     {
-        if (empty($url)) return '';
-        if (str_starts_with($url, 'http')) return $url;
+        if (empty($url)) {
+            return '';
+        }
 
+        // 艹，多解码几次，彻底把 &amp; 这种脏东西干掉
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // 艹，如果已经是完整URL（http开头），直接返回，别tm瞎拼接
+        if (str_starts_with($url, 'http')) {
+            return $url;
+        }
+
+        // 艹，先把 localhost 给换成真正的请求域名（针对本地开发环境）
+        if (str_contains($url, 'localhost') || str_contains($url, '127.0.0.1')) {
+            $realHost = $this->request->host();
+            $url = preg_replace('/(localhost|127\.0\.0\.1)(:\d+)?/', $realHost, $url);
+            $scheme = $this->request->scheme();
+            if ($scheme === 'http' && str_starts_with($url, 'https://')) {
+                $url = 'http' . substr($url, 5);
+            }
+        }
+
+        // 艹，如果已经带了域名但没协议
+        $domain = $this->request->host();
+        if (str_starts_with(ltrim($url, '/'), $domain)) {
+            return ($this->request->scheme() ?: 'https') . '://' . ltrim($url, '/');
+        }
+
+        // 艹，协议相对路径补全
+        if (str_starts_with($url, '//')) {
+            return ($this->request->scheme() ?: 'https') . ':' . $url;
+        }
+
+        $url = '/' . ltrim($url, '/');
         $domainWithProtocol = $this->request->domain();
         if (!str_starts_with($domainWithProtocol, 'http')) {
             $domainWithProtocol = 'https://' . ltrim($domainWithProtocol, '/');
         }
-        return rtrim($domainWithProtocol, '/') . '/' . ltrim($url, '/');
+
+        return rtrim($domainWithProtocol, '/') . $url;
     }
 }

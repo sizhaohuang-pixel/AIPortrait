@@ -41,8 +41,8 @@
 
 		<view v-if="loading && list.length === 0" class="loading-state">加载中...</view>
 		<view v-if="!loading && list.length === 0" class="empty-state">
-			<view class="empty-icon">{{ emptyIcon }}</view>
-			<text>{{ emptyText }}</text>
+			<view :class="['empty-icon', type === 'likes' ? 'is-likes' : 'is-collections']"></view>
+			<text class="empty-text">{{ emptyText }}</text>
 		</view>
 		<view v-if="finished && list.length > 0" class="no-more">没有更多了</view>
 	</view>
@@ -64,9 +64,6 @@
 			}
 		},
 		computed: {
-			emptyIcon() {
-				return this.type === 'likes' ? '❤' : '⭐'
-			},
 			emptyText() {
 				return this.type === 'likes' ? '你还没有点赞过笔记哦' : '你还没有收藏过笔记哦'
 			}
@@ -229,13 +226,58 @@
 
 	.loading-state, .empty-state, .no-more {
 		text-align: center;
-		padding: 60rpx 40rpx;
+		padding: 120rpx 40rpx;
 		font-size: 24rpx;
 		color: #999;
 	}
 
-	.empty-icon {
-		font-size: 80rpx;
-		margin-bottom: 20rpx;
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 160rpx 60rpx;
 	}
+
+	.empty-icon {
+		width: 160rpx;
+		height: 160rpx;
+		background-color: #ddd;
+		margin-bottom: 40rpx;
+	}
+
+	.empty-icon.is-likes {
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z'/%3E%3C/svg%3E") no-repeat center / contain;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z'/%3E%3C/svg%3E") no-repeat center / contain;
+	}
+
+	.empty-icon.is-collections {
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/%3E%3C/svg%3E") no-repeat center / contain;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/%3E%3C/svg%3E") no-repeat center / contain;
+	}
+
+	.empty-text {
+		font-size: 26rpx;
+		color: #bbb;
+	}
+
+	.no-more {
+		text-align: center;
+		padding: 40rpx 0 80rpx;
+		font-size: 22rpx;
+		color: #ccc;
+		position: relative;
+	}
+
+	.no-more::before, .no-more::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		width: 60rpx;
+		height: 1rpx;
+		background: #eee;
+		margin-top: -20rpx;
+	}
+
+	.no-more::before { left: 160rpx; }
+	.no-more::after { right: 160rpx; }
 </style>

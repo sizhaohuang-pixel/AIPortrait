@@ -12,19 +12,59 @@
 
 ## 变更记录 (Changelog)
 
-### 2026-02-21 05:07:30
-- 增量更新项目 AI 上下文索引文档
-- **✨ 新增：社交发现系统模块**
-  - 后端：`app/api/controller/Discovery.php`
-  - 数据模型：`DiscoveryNote`, `DiscoveryLike`, `DiscoveryCollection`, `DiscoveryComment`, `UserFollow`
-  - 前端：`frontend/src/pages/discovery/` (首页、详情、发布、管理)
-- **✨ 新增：AI 任务守护进程**
-  - 路径：`app/command/PortraitDaemon.php`
-  - 功能：支持并发任务抢占、超时处理、状态轮询
-- 完善模块统计与覆盖率
-  - 扫描覆盖率：98%
-  - 扫描文件数：880
-  - 更新前端目录映射为 `frontend/src/pages/`
+### 2026-02-21 08:15:00
+- **✨ 增强：全站互动图标（点赞/收藏）状态视觉优化**
+  - 前端：重构 `discovery/detail.vue` 和 `discovery/index.vue` 中的点赞与收藏图标
+  - 视觉：引入空心/实心切换逻辑（♡/❤, ☆/★），并为收藏图标配置专属金色（#ffb800）
+  - 后端：优化 `Discovery.php` 的 `index` 和 `myNotes` 接口，支持批量查询并返回当前用户的互动状态（`is_like`, `is_collection`）
+
+### 2026-02-21 08:00:00
+- **🔧 修复：头像 URL 域名重复拼接问题**
+  - 后端：优化 `User.php` 和 `Discovery.php` 的 `convertImageUrl` 逻辑，增加域名检测，防止对已包含域名的路径重复拼接
+  - 前端：重构全站 `formattedAvatar` 逻辑，增加基于 `API_CONFIG.baseURL` 的 Host 智能匹配，确保 URL 拼接的唯一性与准确性
+
+### 2026-02-21 07:45:00
+- **✨ 增强：全站头像路径转换逻辑加固**
+  - 后端：在 `Discovery.php` 中引入 `convertImageUrl` 方法，统一处理发现列表、详情、评论及我的笔记中的头像路径，确保返回带域名的绝对地址
+  - 前端：在“发现列表”、“发现详情”、“关注/粉丝列表”等多个页面引入 `formattedAvatar` 工具逻辑，实现前端侧的路径二次保障，彻底解决发布后头像无法显示的问题
+
+### 2026-02-21 07:30:00
+- **🔧 修复：发布后小程序头像无法显示问题**
+  - 后端：在 `User.php` 的 `info`, `checkIn`, `mobileLogin`, `wechatLogin` 接口中统一使用 `convertImageUrl` 转换头像路径为绝对 URL
+  - 前端：在 `mine/index.vue` 中新增 `formattedAvatar` 计算属性，多重保障处理相对路径
+  - 优化：`mine/index.vue` 获取统计数据时同步更新并缓存最新的用户信息
+
+### 2026-02-21 07:20:00
+- **🔧 修复：退出登录重复确认弹窗 Bug**
+  - 前端：移除 `mine/index.vue` 中多余的 `uni.showModal` 调用，统一使用 `utils/auth.js` 内部封装的确认逻辑，避免双重确认弹窗
+
+### 2026-02-21 07:15:00
+- **✨ 优化：'我的'页面积分卡片交互重构**
+  - 前端：将整个 `score-card` 区域的点击事件统一指向 `goRecharge`，实现全域充值跳转
+  - 理由：由于下方菜单列表已提供"积分明细"入口，卡片区域应聚焦核心充值功能，提升转化链路
+
+### 2026-02-21 07:10:00
+- **🔧 修复：“我的”页面充值按钮点击失效问题**
+  - 前端：修复 `mine/index.vue` 中 `score-card` 的伪元素遮挡导致无法触发充值跳转的问题
+  - 优化：给 `.score-card::before` 装饰元素添加 `pointer-events: none`，提升 `.score-btn` 的 `z-index` 层级
+
+### 2026-02-21 06:15:00
+- **✨ 增强：登录自动同步微信资料**
+  - 后端：`User.php` 的 `wechatLogin` 接口支持接收并自动保存微信昵称和头像
+  - 前端：登录页面集成 `uni.getUserProfile`，实现首次登录资料自动填充
+- **🔧 修复：会员资料保存报错与头像路径优化**
+  - 后端：修改 `Account` 验证器，从 `edit` 场景移除 `username` 必填限制，适配微信自动注册用户
+  - 后端：优化 `Account.php` 头像保存逻辑，自动剥离域名仅保留相对路径，解决 `localhost` 存库问题
+  - 后端：放宽昵称校验规则，移除 `chsDash` 限制，支持更多样化的微信昵称
+- **🎨 视觉优化：空状态图标全局更新**
+  - 采用 SVG Mask 方案替换所有页面的 Emoji 占位符
+  - 涉及页面：发现列表、我的相册、作品集、点赞/收藏列表、粉丝/关注列表、首页模板列表
+- **🔧 修复：积分明细标题截断问题**
+  - 后端：`TaskProcessor.php` 强化日志描述信息
+  - API：`Score.php` 优化日志合并算法与 `cleanMemo` 清理逻辑
+- **✨ 增强：'我的'页面极致极简风重构**
+  - 适配 native 导航栏，采用黑白 Geek 审美，全面使用自定义 SVG 图标
+
 
 ### 2026-02-13 23:30:00
 - 修复后台任务管理页面时间字段显示问题
