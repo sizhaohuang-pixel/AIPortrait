@@ -34,4 +34,14 @@ class AiTemplate extends Model
         $status = [0 => '禁用', 1 => '启用'];
         return $status[$data['status']] ?? '';
     }
+
+    /**
+     * 性别文本
+     * 老王提示：1=男, 2=女, 3=通用
+     */
+    public function getGenderTextAttr($value, $data): string
+    {
+        $genders = [0 => '未指定', 1 => '男', 2 => '女', 3 => '通用'];
+        return $genders[$data['gender']] ?? '未知';
+    }
 }

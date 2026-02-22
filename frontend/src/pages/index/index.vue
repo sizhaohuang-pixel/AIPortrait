@@ -21,37 +21,35 @@
 					</swiper>
 				</view>
 
-				<view class="section">
-					<view class="section-title">风格分类</view>
-					<view class="style-tabs">
-						<!-- 添加"全部"选项 -->
-						<view
-							:class="['style-tab', activeStyleId === 0 ? 'is-active' : '']"
-							@tap="setStyle(0)"
-						>
-							全部
-						</view>
-						<view
-							v-for="item in styles"
-							:key="item.id"
-							:class="['style-tab', activeStyleId === item.id ? 'is-active' : '']"
-							@tap="setStyle(item.id)"
-						>
-							{{ item.name }}
-						</view>
+				<view class="filter-bar">
+					<view :class="['filter-item', activeFilter === 'sort' ? 'is-active' : '']" @tap="toggleFilter('sort')">
+						<text>{{ sortLabel }}</text>
+						<text class="arrow">▼</text>
+					</view>
+					<view :class="['filter-item', activeFilter === 'style' ? 'is-active' : '']" @tap="toggleFilter('style')">
+						<text>{{ styleLabel }}</text>
+						<text class="arrow">▼</text>
+					</view>
+					<view :class="['filter-item', activeFilter === 'gender' ? 'is-active' : '']" @tap="toggleFilter('gender')">
+						<text>{{ genderLabel }}</text>
+						<text class="arrow">▼</text>
+					</view>
+					<view :class="['filter-item', activeFilter === 'person' ? 'is-active' : '']" @tap="toggleFilter('person')">
+						<text>{{ personLabel }}</text>
+						<text class="arrow">▼</text>
 					</view>
 				</view>
 
 				<view class="section">
 					<view class="section-title">精选模板</view>
-					<view v-if="filteredTemplates.length > 0" class="grid">
+					<view v-if="templates.length > 0" class="grid">
 						<view
-							v-for="item in filteredTemplates"
+							v-for="item in templates"
 							:key="item.id"
 							class="card"
 							@tap="goDetail(item.id)"
 						>
-							<image class="card-cover" :src="item.cover_url" mode="aspectFill" lazy-load></image>
+							<image class="card-cover" :src="formattedUrl(item.cover_url)" mode="aspectFill" lazy-load></image>
 							<view class="card-body">
 								<view class="card-title">{{ item.title }}</view>
 								<view class="card-tags">
@@ -62,11 +60,28 @@
 					</view>
 					<view v-else class="empty-state">
 						<view class="empty-icon"></view>
-						<text class="empty-text">暂无相关风格模板</text>
+						<text class="empty-text">暂无符合条件的模板</text>
 					</view>
 				</view>
 			</view>
 		</scroll-view>
+
+		<!-- 筛选弹窗 -->
+		<view v-if="activeFilter" class="filter-mask" @tap="closeFilter" @touchmove.stop.prevent>
+			<view class="filter-dropdown" @tap.stop>
+				<scroll-view scroll-y class="dropdown-list">
+					<view
+						v-for="opt in currentOptions"
+						:key="opt.value"
+						:class="['dropdown-item', isSelected(opt.value) ? 'is-selected' : '']"
+						@tap="selectOption(opt.value)"
+					>
+						{{ opt.label }}
+						<text v-if="isSelected(opt.value)" class="check">✔</text>
+					</view>
+				</scroll-view>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -82,8 +97,14 @@
 		data() {
 			return {
 				loading: true,
-				refreshing: false,  // 下拉刷新状态
-				activeStyleId: 0,   // 默认为 0（全部）
+				refreshing: false,
+				activeFilter: null, // 当前展开的筛选类型
+				filters: {
+					sort: 'recommend',
+					styleId: 0,
+					gender: 0,
+					personCount: 0
+				},
 				styles: [],
 				templates: [],
 				banners: []
@@ -93,122 +114,148 @@
 			this.loadData()
 		},
 		computed: {
-			filteredTemplates() {
-				const templates = this.activeStyleId === 0
-					? this.templates
-					: this.templates.filter(function(item) {
-						return item.style_id === this.activeStyleId
-					}, this)
-
-				// 艹，处理模板图片 URL，如果是相对路径则拼接域名
-				return templates.map(template => {
-					let cover_url = template.cover_url
-					if (cover_url && cover_url.startsWith('/') && !cover_url.startsWith('http')) {
-						cover_url = API_CONFIG.baseURL + cover_url
-					}
-					return {
-						...template,
-						cover_url: cover_url
-					}
-				})
+			sortLabel() {
+				const map = { recommend: '推荐', hot: '热门', new: '最新' }
+				return map[this.filters.sort]
+			},
+			styleLabel() {
+				if (this.filters.styleId === 0) return '分类'
+				const style = this.styles.find(s => s.id === this.filters.styleId)
+				return style ? style.name : '分类'
+			},
+			genderLabel() {
+				const map = { 0: '性别', 1: '男', 2: '女', 3: '通用' }
+				return map[this.filters.gender]
+			},
+			personLabel() {
+				const map = { 0: '人数', 1: '单人', 2: '双人', 3: '多人' }
+				return map[this.filters.personCount]
+			},
+			currentOptions() {
+				if (this.activeFilter === 'sort') {
+					return [
+						{ label: '推荐排序', value: 'recommend' },
+						{ label: '热门排行', value: 'hot' },
+						{ label: '最新发布', value: 'new' }
+					]
+				}
+				if (this.activeFilter === 'style') {
+					const opts = [{ label: '全部风格', value: 0 }]
+					this.styles.forEach(s => opts.push({ label: s.name, value: s.id }))
+					return opts
+				}
+				if (this.activeFilter === 'gender') {
+					return [
+						{ label: '全部性别', value: 0 },
+						{ label: '男生', value: 1 },
+						{ label: '女生', value: 2 },
+						{ label: '通用/双人', value: 3 }
+					]
+				}
+				if (this.activeFilter === 'person') {
+					return [
+						{ label: '全部人数', value: 0 },
+						{ label: '单人', value: 1 },
+						{ label: '双人', value: 2 },
+						{ label: '多人', value: 3 }
+					]
+				}
+				return []
 			},
 			// 艹，处理 Banner 图片 URL，如果是相对路径则拼接域名
 			processedBanners() {
 				return this.banners.map(banner => {
-					let url = banner.url
-					// 如果是相对路径（以 / 开头但不是 http），拼接域名
-					if (url && url.startsWith('/') && !url.startsWith('http')) {
-						url = API_CONFIG.baseURL + url
-					}
 					return {
 						...banner,
-						url: url
+						url: this.formattedUrl(banner.url)
 					}
 				})
 			}
 		},
 		methods: {
+			formattedUrl(url) {
+				if (!url) return ''
+				if (url.startsWith('http')) return url
+				const base = API_CONFIG.baseURL.replace(/\/+$/, '')
+				const path = url.startsWith('/') ? url : '/' + url
+				return base + path
+			},
 			// 加载数据
 			async loadData() {
 				try {
 					this.loading = true
-
-					// 艹，同时加载风格、模板和Banner数据
 					const [stylesRes, templatesRes, bannersRes] = await Promise.all([
 						get('/api/portrait/styles'),
-						get('/api/portrait/templates'),
+						this.fetchTemplates(),
 						get('/api/banner/list')
 					])
-
 					this.styles = stylesRes.styles || []
 					this.templates = templatesRes.templates || []
 					this.banners = bannersRes.list || []
-
-					// 默认选中"全部"（activeStyleId = 0）
-					// 不需要设置为第一个风格了
 				} catch (error) {
 					console.error('加载数据失败：', error)
-					uni.showToast({
-						title: '加载失败，请重试',
-						icon: 'none'
-					})
+					uni.showToast({ title: '加载失败', icon: 'none' })
 				} finally {
 					this.loading = false
 				}
 			},
-
-			// 下拉刷新
+			async fetchTemplates() {
+				return get('/api/portrait/templates', {
+					style_id: this.filters.styleId,
+					sort: this.filters.sort,
+					gender: this.filters.gender,
+					person_count: this.filters.personCount
+				})
+			},
 			async onRefresh() {
 				this.refreshing = true
 				try {
-					// 艹，重新加载所有数据
-					const [stylesRes, templatesRes, bannersRes] = await Promise.all([
-						get('/api/portrait/styles'),
-						get('/api/portrait/templates'),
+					const [templatesRes, bannersRes] = await Promise.all([
+						this.fetchTemplates(),
 						get('/api/banner/list')
 					])
-
-					this.styles = stylesRes.styles || []
 					this.templates = templatesRes.templates || []
 					this.banners = bannersRes.list || []
-
-					// 刷新成功，不显示提示
 				} catch (error) {
 					console.error('刷新失败：', error)
-					uni.showToast({
-						title: '刷新失败',
-						icon: 'none'
-					})
 				} finally {
-					// 延迟关闭刷新状态，让用户看到刷新动画
-					setTimeout(() => {
-						this.refreshing = false
-					}, 500)
+					setTimeout(() => { this.refreshing = false }, 500)
 				}
 			},
-
-			// 刷新恢复
-			onRestore() {
-				this.refreshing = false
+			onRestore() { this.refreshing = false },
+			toggleFilter(type) {
+				this.activeFilter = this.activeFilter === type ? null : type
 			},
-
-			// 切换风格
-			setStyle(styleId) {
-				this.activeStyleId = styleId
+			closeFilter() { this.activeFilter = null },
+			isSelected(val) {
+				const current = {
+					sort: this.filters.sort,
+					style: this.filters.styleId,
+					gender: this.filters.gender,
+					person: this.filters.personCount
+				}
+				return current[this.activeFilter] === val
 			},
+			async selectOption(val) {
+				if (this.activeFilter === 'sort') this.filters.sort = val
+				else if (this.activeFilter === 'style') this.filters.styleId = val
+				else if (this.activeFilter === 'gender') this.filters.gender = val
+				else if (this.activeFilter === 'person') this.filters.personCount = val
 
-			// 艹，点击Banner跳转到详情页
+				this.closeFilter()
+				uni.showLoading({ title: '加载中' })
+				try {
+					const res = await this.fetchTemplates()
+					this.templates = res.templates || []
+				} finally {
+					uni.hideLoading()
+				}
+			},
 			handleBannerClick(banner) {
-				uni.navigateTo({
-					url: `/pages/banner-detail/index?id=${banner.id}`
-				})
+				uni.navigateTo({ url: `/pages/banner-detail/index?id=${banner.id}` })
 			},
-
-			// 跳转到模板详情
 			goDetail(templateId) {
-				uni.navigateTo({
-					url: `/pages/template-detail/index?templateId=${templateId}`
-				})
+				uni.navigateTo({ url: `/pages/template-detail/index?templateId=${templateId}` })
 			}
 		}
 	}
@@ -221,7 +268,6 @@
 		--text: #1f1a17;
 		--muted: #7a6f69;
 		--accent: #e85a4f;
-		--accent-soft: #f9dfdd;
 		--ink: #2b2521;
 		height: 100vh;
 		width: 100%;
@@ -236,42 +282,16 @@
 		width: 100%;
 	}
 
-	/* 强制覆盖下拉刷新指示器颜色 */
-	.scroll-view ::v-deep .uni-scroll-view-refresher {
-		background: transparent !important;
-	}
-
-	.scroll-view ::v-deep .uni-scroll-view-refresh {
-		background: transparent !important;
-	}
-
-	.scroll-view ::v-deep .uni-scroll-view-refresh__spinner {
-		color: #2b2521 !important;
-		border-color: #2b2521 !important;
-	}
-
-	.scroll-view ::v-deep .uni-scroll-view-refresh__spinner circle {
-		stroke: #2b2521 !important;
-	}
-
-	.scroll-view ::v-deep .uni-loading {
-		border-color: #2b2521 transparent transparent transparent !important;
-	}
-
 	.content {
-		padding: 24rpx 28rpx 100rpx;
-	}
-
-	.section {
-		margin-top: 22rpx;
+		padding: 24rpx 28rpx 120rpx;
 	}
 
 	.banner {
-		margin-top: 6rpx;
+		margin-bottom: 30rpx;
 	}
 
 	.banner-swiper {
-		height: 560rpx;
+		height: 480rpx;
 		border-radius: 24rpx;
 		overflow: hidden;
 		box-shadow: 0 16rpx 30rpx rgba(37, 30, 25, 0.12);
@@ -282,120 +302,175 @@
 		height: 100%;
 	}
 
-	.section-title {
-		font-size: 26rpx;
-		font-weight: 600;
-		color: var(--ink);
-		margin-bottom: 14rpx;
-	}
-
-	.style-tabs {
+	/* 筛选栏样式 */
+	.filter-bar {
 		display: flex;
-		gap: 16rpx;
-		padding: 4rpx 2rpx 6rpx;
-		overflow-x: auto;
+		justify-content: space-between;
+		align-items: center;
+		padding: 20rpx 0;
+		position: sticky;
+		top: 0;
+		z-index: 100;
+		background: transparent;
 	}
 
-	.style-tab {
-		padding: 10rpx 20rpx;
-		border-radius: 18rpx;
-		background: #ffffff;
+	.filter-item {
+		display: flex;
+		align-items: center;
+		gap: 8rpx;
+		font-size: 26rpx;
 		color: #6a5f58;
-		font-size: 24rpx;
-		white-space: nowrap;
-		border: 1rpx solid #efe7e1;
-		transition: all 0.2s ease;
+		padding: 12rpx 20rpx;
+		background: rgba(255, 255, 255, 0.8);
+		border-radius: 12rpx;
+		backdrop-filter: blur(4px);
+		transition: all 0.2s;
 	}
 
-	.style-tab.is-active {
-		background: #2b2521;
-		color: #ffffff;
-		border-color: #2b2521;
+	.filter-item.is-active {
+		color: var(--accent);
+		background: #fff;
+		box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+	}
+
+	.arrow {
+		font-size: 16rpx;
+		transform: scale(0.8);
+		color: #ccc;
+	}
+
+	.filter-item.is-active .arrow {
+		transform: scale(0.8) rotate(180deg);
+		color: var(--accent);
+	}
+
+	.section-title {
+		font-size: 28rpx;
+		font-weight: bold;
+		color: var(--ink);
+		margin: 20rpx 0;
 	}
 
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 22rpx;
-		padding-bottom: 24rpx;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 24rpx;
 	}
 
 	.card {
 		background: var(--card);
-		border-radius: 22rpx;
+		border-radius: 24rpx;
 		overflow: hidden;
 		box-shadow: 0 12rpx 28rpx rgba(37, 30, 25, 0.08);
-		border: 1rpx solid #f0e6df;
-		animation: rise 360ms ease-out;
+		animation: rise 0.4s ease-out;
 	}
 
 	.card-cover {
 		width: 100%;
-		aspect-ratio: 3 / 4;
-		height: 448rpx;
+		height: 440rpx;
 		background: #f3f3f3;
 	}
 
-	@supports (aspect-ratio: 1 / 1) {
-		.card-cover {
-			height: auto;
-		}
-	}
-
 	.card-body {
-		padding: 18rpx 16rpx 20rpx;
+		padding: 20rpx 16rpx;
 	}
 
 	.card-title {
 		font-size: 28rpx;
 		font-weight: 600;
 		color: var(--ink);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.card-tags {
 		display: flex;
-		gap: 10rpx;
-		margin-top: 10rpx;
+		gap: 8rpx;
+		margin-top: 12rpx;
 		flex-wrap: wrap;
 	}
 
 	.tag {
 		font-size: 20rpx;
-		padding: 6rpx 12rpx;
-		border-radius: 12rpx;
+		padding: 4rpx 12rpx;
+		border-radius: 8rpx;
 		background: #f7efe9;
 		color: #7c6a60;
 	}
 
-	.empty-state {
+	/* 弹窗样式 */
+	.filter-mask {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(0,0,0,0.4);
+		z-index: 1000;
+	}
+
+	.filter-dropdown {
+		position: absolute;
+		top: 100rpx; /* 根据实际位置调整 */
+		left: 0;
+		width: 100%;
+		background: #fff;
+		border-radius: 0 0 30rpx 30rpx;
+		padding: 20rpx 0;
+		animation: slideDown 0.2s ease-out;
+	}
+
+	.dropdown-list {
+		max-height: 600rpx;
+	}
+
+	.dropdown-item {
+		padding: 30rpx 40rpx;
+		font-size: 28rpx;
+		color: #333;
 		display: flex;
-		flex-direction: column;
+		justify-content: space-between;
 		align-items: center;
-		padding: 120rpx 60rpx;
 	}
 
-	.empty-icon {
-		width: 160rpx;
-		height: 160rpx;
-		background-color: #ddd;
-		margin-bottom: 40rpx;
-		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;
-		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;
+	.dropdown-item.is-selected {
+		color: var(--accent);
+		background: #fffaf9;
+		font-weight: bold;
 	}
 
-	.empty-text {
-		font-size: 26rpx;
-		color: #bbb;
+	.check {
+		font-size: 24rpx;
+	}
+
+	@keyframes slideDown {
+		from { transform: translateY(-20rpx); opacity: 0; }
+		to { transform: translateY(0); opacity: 1; }
 	}
 
 	@keyframes rise {
-		from {
-			transform: translateY(12rpx);
-			opacity: 0;
-		}
-		to {
-			transform: translateY(0);
-			opacity: 1;
-		}
+		from { transform: translateY(20rpx); opacity: 0; }
+		to { transform: translateY(0); opacity: 1; }
+	}
+
+	.empty-state {
+		padding: 100rpx 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	.empty-icon {
+		width: 120rpx;
+		height: 120rpx;
+		background: #eee;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/%3E%3C/svg%3E") no-repeat center / contain;
+		margin-bottom: 20rpx;
+	}
+
+	.empty-text {
+		color: #999;
+		font-size: 24rpx;
 	}
 </style>

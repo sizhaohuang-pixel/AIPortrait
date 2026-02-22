@@ -180,23 +180,50 @@ class Portrait extends Frontend
 
     /**
      * 获取模板列表
-     * GET /api/portrait/templates?style_id=1
+     * GET /api/portrait/templates?style_id=1&sort=recommend&gender=1&person_count=1
      */
     public function templates()
     {
         try {
             $styleId = $this->request->get('style_id/d', 0);
+            $sort = $this->request->get('sort', 'recommend');
+            $gender = $this->request->get('gender/d', 0);
+            $personCount = $this->request->get('person_count/d', 0);
 
             $where = ['status' => 1];
             if ($styleId > 0) {
                 $where['style_id'] = $styleId;
             }
+            if ($gender > 0) {
+                $where['gender'] = $gender;
+            }
 
-            $templates = Db::name('ai_template')
-                ->where($where)
-                ->order('sort', 'asc')
-                ->select()
-                ->toArray();
+            $query = Db::name('ai_template')->where($where);
+
+            // 艹，人数筛选：1=单人, 2=双人, 3=多人
+            if ($personCount > 0) {
+                if ($personCount === 3) {
+                    $query->where('face_count', '>=', 3);
+                } else {
+                    $query->where('face_count', $personCount);
+                }
+            }
+
+            // 排序逻辑：recommend=推荐, hot=热门, new=最新
+            switch ($sort) {
+                case 'hot':
+                    $query->order('usage_count', 'desc')->order('sort', 'asc');
+                    break;
+                case 'new':
+                    $query->order('create_time', 'desc')->order('sort', 'asc');
+                    break;
+                case 'recommend':
+                default:
+                    $query->order('sort', 'asc')->order('id', 'desc');
+                    break;
+            }
+
+            $templates = $query->select()->toArray();
 
             // 将tags字符串转换为数组
             foreach ($templates as &$template) {
@@ -450,6 +477,9 @@ class Portrait extends Frontend
                     'progress' => 5,
                     'update_time' => time(),
                 ]);
+
+                // 艹，增加模板使用次数
+                Db::name('ai_template')->where('id', $templateId)->inc('usage_count')->update();
 
                 Db::commit();
             } catch (\Exception $e) {
