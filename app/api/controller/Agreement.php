@@ -29,8 +29,8 @@ class Agreement extends Frontend
             $this->error('协议类型不能为空');
         }
 
-        // 艹，允许查询这三种类型
-        if (!in_array($type, ['privacy', 'user', 'about'])) {
+        // 艹，允许查询这几种类型
+        if (!in_array($type, ['privacy', 'user', 'about', 'custom'])) {
             $this->error('协议类型不正确');
         }
 

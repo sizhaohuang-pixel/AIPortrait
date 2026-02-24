@@ -13,21 +13,62 @@ use Exception;
 class Agreement extends Backend
 {
     /**
-     * @var AgreementModel
-     */
-    protected object $model;
-
-    protected array|string $preExcludeFields = ['id', 'createtime', 'updatetime'];
-
-    /**
      * 艹，无需权限验证的方法
      */
-    protected array $noNeedPermission = ['index', 'edit'];
+    protected array $noNeedPermission = ['index', 'edit', 'add'];
 
     public function initialize(): void
     {
         parent::initialize();
         $this->model = new AgreementModel();
+    }
+
+    /**
+     * 添加
+     * 艹，新增协议
+     */
+    public function add(): void
+    {
+        if ($this->request->isPost()) {
+            $data = $this->request->post();
+            if (!$data) {
+                $this->error(__('Parameter %s can not be empty', ['']));
+            }
+
+            // 艹，防止 HTML 被转义
+            $originalContent = input('post.content/s', '', null);
+            $data = $this->excludeFields($data);
+            if ($originalContent !== '') {
+                $data['content'] = $originalContent;
+            }
+
+            $this->model->startTrans();
+            try {
+                if (empty($data['type'])) {
+                    $this->error('类型不能为空');
+                }
+                if (empty($data['title'])) {
+                    $this->error('标题不能为空');
+                }
+                if (empty($data['content'])) {
+                    $this->error('内容不能为空');
+                }
+
+                $result = $this->model->save($data);
+                $this->model->commit();
+            } catch (Exception $e) {
+                $this->model->rollback();
+                $this->error($e->getMessage());
+            }
+
+            if ($result !== false) {
+                $this->success(__('Save successful'));
+            } else {
+                $this->error(__('Save failed'));
+            }
+        }
+
+        $this->error(__('Method not allowed'));
     }
 
     /**

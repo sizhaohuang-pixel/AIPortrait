@@ -4,7 +4,8 @@
             <template #header>
                 <div class="card-header">
                     <span>协议管理</span>
-                    <div class="card-header-tip">管理隐私协议和用户协议内容</div>
+                    <div class="card-header-tip">管理隐私协议、用户协议及定制精修内容</div>
+                    <el-button type="success" @click="handleAdd">添加协议</el-button>
                 </div>
             </template>
 
@@ -19,6 +20,9 @@
                     <template #default="scope">
                         <el-tag v-if="scope.row.type === 'privacy'" type="primary">隐私协议</el-tag>
                         <el-tag v-else-if="scope.row.type === 'user'" type="success">用户协议</el-tag>
+                        <el-tag v-else-if="scope.row.type === 'about'" type="info">关于我们</el-tag>
+                        <el-tag v-else-if="scope.row.type === 'custom'" type="warning">定制精修</el-tag>
+                        <el-tag v-else type="danger">{{ scope.row.type }}</el-tag>
                     </template>
                 </el-table-column>
                 <el-table-column prop="title" label="标题" />
@@ -41,10 +45,10 @@
             </el-table>
         </el-card>
 
-        <!-- 艹，编辑弹窗 -->
+        <!-- 艹，编辑/添加弹窗 -->
         <el-dialog
             v-model="state.dialogVisible"
-            :title="'编辑' + (state.currentRow?.type === 'privacy' ? '隐私协议' : '用户协议')"
+            :title="state.form.id > 0 ? '编辑协议' : '添加协议'"
             width="80%"
             :close-on-click-modal="false"
         >
@@ -54,6 +58,15 @@
                 :rules="state.rules"
                 label-width="100px"
             >
+                <el-form-item label="类型" prop="type">
+                    <el-select v-model="state.form.type" placeholder="请选择类型" :disabled="state.form.id > 0">
+                        <el-option label="隐私协议" value="privacy" />
+                        <el-option label="用户协议" value="user" />
+                        <el-option label="关于我们" value="about" />
+                        <el-option label="定制精修" value="custom" />
+                    </el-select>
+                </el-form-item>
+
                 <el-form-item label="标题" prop="title">
                     <el-input v-model="state.form.title" placeholder="请输入标题" />
                 </el-form-item>
@@ -99,11 +112,13 @@ const state = reactive({
     currentRow: null as any,
     form: {
         id: 0,
+        type: 'privacy',
         title: '',
         content: '',
         status: 1,
     },
     rules: {
+        type: [{ required: true, message: '请选择类型', trigger: 'change' }],
         title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
         content: [{ required: true, message: '请输入内容', trigger: 'blur' }],
     } as FormRules,
@@ -134,10 +149,21 @@ const getList = async () => {
     }
 }
 
+// 艹，添加
+const handleAdd = () => {
+    state.form.id = 0
+    state.form.type = 'privacy'
+    state.form.title = ''
+    state.form.content = ''
+    state.form.status = 1
+    state.dialogVisible = true
+}
+
 // 艹，编辑
 const handleEdit = (row: any) => {
     state.currentRow = row
     state.form.id = row.id
+    state.form.type = row.type
     state.form.title = row.title
     state.form.content = row.content
     state.form.status = row.status
@@ -154,10 +180,11 @@ const handleSave = async () => {
             state.submitting = true
             try {
                 const res = await createAxios({
-                    url: '/admin/system.agreement/edit',
+                    url: state.form.id > 0 ? '/admin/system.agreement/edit' : '/admin/system.agreement/add',
                     method: 'post',
                     data: {
                         id: state.form.id,
+                        type: state.form.type,
                         title: state.form.title,
                         content: state.form.content,
                         status: state.form.status,
