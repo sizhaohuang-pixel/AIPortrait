@@ -42,7 +42,7 @@ class Config extends Backend
 
     /**
      * 保存积分配置
-     * 艹，批量更新配置项
+     * 艹，批量更新配置项（现在也管文案了）
      */
     public function save(): void
     {
@@ -50,44 +50,37 @@ class Config extends Backend
             try {
                 $data = $this->request->post();
 
-                // 艹，验证必填配置项
-                $requiredKeys = ['recharge_ratio', 'generate_cost', 'score_expire_days'];
-                foreach ($requiredKeys as $key) {
-                    if (!isset($data[$key])) {
-                        $this->error("缺少必填配置项：{$key}");
-                    }
-                }
+                // 艹，定义所有允许保存的配置项
+                $allowKeys = [
+                    'recharge_ratio',
+                    'generate_cost',
+                    'score_expire_days',
+                    'mode1_rate',
+                    'mode2_rate',
+                    'share_friend_title',
+                    'share_timeline_title',
+                    'home_share_friend_title',
+                    'home_share_timeline_title',
+                    'discovery_share_title',
+                    'note_detail_share_title'
+                ];
 
-                // 艹，验证数值类型
-                if (!is_numeric($data['recharge_ratio']) || $data['recharge_ratio'] <= 0) {
-                    $this->error('充值比例必须是大于0的数字');
-                }
-
-                if (!is_numeric($data['generate_cost']) || $data['generate_cost'] <= 0) {
-                    $this->error('生成消耗必须是大于0的数字');
-                }
-
-                if (!is_numeric($data['score_expire_days']) || $data['score_expire_days'] < 0) {
-                    $this->error('积分有效期必须是大于等于0的数字');
-                }
-
-                // 艹，验证倍率配置（如果有提供）
-                if (isset($data['mode1_rate']) && $data['mode1_rate'] !== '') {
-                    if (!is_numeric($data['mode1_rate']) || $data['mode1_rate'] <= 0) {
-                        $this->error('梦幻模式倍率必须是大于0的数字');
-                    }
-                }
-                if (isset($data['mode2_rate']) && $data['mode2_rate'] !== '') {
-                    if (!is_numeric($data['mode2_rate']) || $data['mode2_rate'] <= 0) {
-                        $this->error('专业模式倍率必须是大于0的数字');
-                    }
-                }
-
-                // 艹，保存所有配置（包括必填项和倍率项）
-                $allKeys = array_merge($requiredKeys, ['mode1_rate', 'mode2_rate']);
+                // 艹，只处理允许保存的 Key
                 foreach ($data as $key => $value) {
-                    if (in_array($key, $allKeys)) {
-                        $result = ScoreConfig::setConfigValue($key, $value);
+                    if (in_array($key, $allowKeys)) {
+                        // 艹，数值类的还是得简单校验下，别特么乱传
+                        if (in_array($key, ['recharge_ratio', 'generate_cost', 'mode1_rate', 'mode2_rate'])) {
+                            if (!is_numeric($value) || $value <= 0) {
+                                continue; // 艹，无效数字直接跳过，不报错也别瞎存
+                            }
+                        }
+                        if ($key === 'score_expire_days') {
+                            if (!is_numeric($value) || $value < 0) {
+                                continue;
+                            }
+                        }
+
+                        $result = ScoreConfig::setConfigValue($key, (string)$value);
                         if (!$result) {
                             $this->error("保存配置项 {$key} 失败");
                         }

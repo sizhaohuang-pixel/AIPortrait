@@ -247,6 +247,14 @@ class Score extends Frontend
         $mode1Rate = floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
         $mode2Rate = floatval(ScoreConfig::getConfigValue('mode2_rate', 2));
 
+        // 艹，增加分享文案配置
+        $shareFriendTitle = ScoreConfig::getConfigValue('share_friend_title', '快来看看我的AI写真！这一张真的绝了~');
+        $shareTimelineTitle = ScoreConfig::getConfigValue('share_timeline_title', '我的AI写真大片，快来一起变美！');
+        $homeShareFriendTitle = ScoreConfig::getConfigValue('home_share_friend_title', '这款AI写真小程序太好玩了，快来试试！');
+        $homeShareTimelineTitle = ScoreConfig::getConfigValue('home_share_timeline_title', 'AI写真：一键生成你的艺术大片');
+        $discoveryShareTitle = ScoreConfig::getConfigValue('discovery_share_title', '发现更多惊艳的AI写真作品');
+        $noteDetailShareTitle = ScoreConfig::getConfigValue('note_detail_share_title', '这张AI写真真的绝了，快来看看！');
+
         $imageCount = 4;
         $mode1Cost = intval($generateCost * $imageCount * $mode1Rate);
         $mode2Cost = intval($generateCost * $imageCount * $mode2Rate);
@@ -258,6 +266,12 @@ class Score extends Frontend
             'mode2_rate' => $mode2Rate,
             'mode1_cost' => $mode1Cost,
             'mode2_cost' => $mode2Cost,
+            'share_friend_title' => $shareFriendTitle,
+            'share_timeline_title' => $shareTimelineTitle,
+            'home_share_friend_title' => $homeShareFriendTitle,
+            'home_share_timeline_title' => $homeShareTimelineTitle,
+            'discovery_share_title' => $discoveryShareTitle,
+            'note_detail_share_title' => $noteDetailShareTitle,
         ]);
     }
 }
