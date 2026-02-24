@@ -198,9 +198,9 @@ class Portrait extends Frontend
             $query = Db::name('ai_template')->where($where);
 
             // 艹，性别筛选：包含逻辑 (用户选 1=男 或 2=女)
-            // 使用 FIND_IN_SET 检查数据库中的性别集合是否包含用户选择的性别
+            // 加上反引号防止字段冲突，并且确保字段名百分百匹配
             if ($gender > 0) {
-                $query->whereRaw("FIND_IN_SET(?, gender)", [$gender]);
+                $query->whereRaw("FIND_IN_SET(?, `gender`)", [$gender]);
             }
 
             // 艹，人数筛选：1=单人, 2=双人, 3=多人
@@ -208,7 +208,7 @@ class Portrait extends Frontend
                 if ($personCount === 3) {
                     $query->where('face_count', '>=', 3);
                 } else {
-                    $query->where('face_count', $personCount);
+                    $query->where('face_count', (int)$personCount);
                 }
             }
 
@@ -809,16 +809,48 @@ class Portrait extends Frontend
                 $this->error('参数错误');
             }
 
-            // 验证并删除
-            $result = Db::name('ai_task_result')
+            // 艹，先查一下这张图属于哪个任务
+            $imageInfo = Db::name('ai_task_result')
                 ->where('id', $id)
                 ->where('user_id', $userId)
-                ->delete();
+                ->find();
 
-            if (!$result) {
+            if (!$imageInfo) {
                 $this->error('删除失败，图片不存在或无权操作');
             }
 
+            $taskId = $imageInfo['task_id'];
+
+            Db::startTrans();
+            try {
+                // 艹，稳准狠地删除图片
+                Db::name('ai_task_result')
+                    ->where('id', $id)
+                    ->where('user_id', $userId)
+                    ->delete();
+
+                // 艹，核心逻辑：检查这个相册（任务）是不是已经空了
+                $remainCount = Db::name('ai_task_result')
+                    ->where('task_id', $taskId)
+                    ->count();
+
+                if ($remainCount <= 0) {
+                    // 艹，照片全删光了，留个空任务占茅坑吗？给丫也铲了！
+                    // 双重保险：带上 user_id，谁也别想删别人的
+                    Db::name('ai_task')
+                        ->where('id', $taskId)
+                        ->where('user_id', $userId)
+                        ->delete();
+                }
+
+                Db::commit();
+            } catch (\Exception $e) {
+                Db::rollback();
+                \think\facade\Log::error('删除照片失败：' . $e->getMessage());
+                $this->error('删除失败，请稍后重试');
+            }
+
+            // 艹！成功响应必须在 catch 外面，不然会被 Exception 截杀！
             $this->success('删除成功');
         } catch (\think\exception\HttpResponseException $e) {
             throw $e;

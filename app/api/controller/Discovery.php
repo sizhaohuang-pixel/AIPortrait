@@ -42,9 +42,15 @@ class Discovery extends Frontend
         $limit = $this->request->get('limit/d', 10);
         $type = $this->request->get('type', 'new'); // new or hot
 
+        $userId = $this->auth->isLogin() ? $this->auth->id : 0;
         $query = DiscoveryNote::with(['user' => function($query) {
             $query->field('id,nickname,avatar');
-        }])->where('status', 1);
+        }])->where(function($q) use ($userId) {
+            $q->where('status', 1);
+            if ($userId > 0) {
+                $q->whereOr('user_id', $userId);
+            }
+        });
 
         if ($type === 'hot') {
             $query->order('likes_count', 'desc')->order('create_time', 'desc');
@@ -81,7 +87,13 @@ class Discovery extends Frontend
             $item['is_collection'] = in_array($item['id'], $myCollections);
         }
 
-        $total = DiscoveryNote::where('status', 1)->count();
+        $totalCountQuery = DiscoveryNote::where(function($q) use ($userId) {
+            $q->where('status', 1);
+            if ($userId > 0) {
+                $q->whereOr('user_id', $userId);
+            }
+        });
+        $total = $totalCountQuery->count();
 
         return $this->success('获取成功', [
             'list' => $list,
@@ -143,6 +155,14 @@ class Discovery extends Frontend
 
         if (!$note) {
             $this->error('笔记不存在');
+        }
+
+        // 艹，权限加固：如果笔记状态不是正常（1），且当前访问者不是作者本人，直接弹走
+        if ($note->status != 1) {
+            $currentUserId = $this->auth->isLogin() ? $this->auth->id : 0;
+            if ($currentUserId != $note->user_id) {
+                $this->error('笔记已被隐藏或无权访问');
+            }
         }
 
         $note = $note->toArray();
@@ -297,6 +317,17 @@ class Discovery extends Frontend
         $limit = $this->request->get('limit/d', 20);
 
         if ($noteId <= 0) $this->error('参数错误');
+
+        // 艹，同步详情页的权限逻辑，先查下笔记状态
+        $note = DiscoveryNote::where('id', $noteId)->find();
+        if (!$note) $this->error('笔记不存在');
+
+        if ($note->status != 1) {
+            $currentUserId = $this->auth->isLogin() ? $this->auth->id : 0;
+            if ($currentUserId != $note->user_id) {
+                $this->error('无权查看评论');
+            }
+        }
 
         $list = DiscoveryComment::with(['user' => function($query) {
             $query->field('id,nickname,avatar');
