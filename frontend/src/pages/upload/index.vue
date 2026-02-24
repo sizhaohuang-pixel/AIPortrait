@@ -61,6 +61,29 @@
 			</view>
 		</view>
 
+		<!-- 选择模式 -->
+		<view class="section">
+			<view class="section-title">选择生成模式</view>
+			<view class="mode-list">
+				<view
+					:class="['mode-card', mode === 1 ? 'is-active' : '']"
+					@tap="setMode(1)"
+				>
+					<view class="mode-name">梦幻模式</view>
+					<view class="mode-desc">更具艺术感与氛围感</view>
+					<view class="mode-cost">消耗 {{ scoreConfig.mode1_cost || 0 }} 积分</view>
+				</view>
+				<view
+					:class="['mode-card', mode === 2 ? 'is-active' : '']"
+					@tap="setMode(2)"
+				>
+					<view class="mode-name">专业模式</view>
+					<view class="mode-desc">写实风格，细节更出众</view>
+					<view class="mode-cost">消耗 {{ scoreConfig.mode2_cost || 0 }} 积分</view>
+				</view>
+			</view>
+		</view>
+
 		<view class="footer">
 			<button class="submit-btn" :disabled="!canSubmit" @tap="submit">
 				提交生成
@@ -86,7 +109,11 @@
 				imageUrls: [],  // 本地临时路径
 				uploadedUrls: [],  // 已上传的 RunningHub URL
 				uploading: false,  // 艹，是否正在上传
-				uploadProgress: 0  // 艹，上传进度（已上传数量）
+				uploadProgress: 0,  // 艹，上传进度（已上传数量）
+				scoreConfig: {
+					mode1_cost: 0,
+					mode2_cost: 0
+				}
 			}
 		},
 		computed: {
@@ -100,12 +127,39 @@
 			this.subTemplateId = parseInt(query.subTemplateId) || 0
 			this.subTemplateName = decodeURIComponent(query.subTemplateName || '')
 			this.title = decodeURIComponent(query.title || '')
-			this.mode = parseInt(query.mode) || 1  // 艹，接收mode参数
 
+			// 艹，默认选择模式1
+			this.mode = 1
+
+			// 艹，加载积分配置
+			this.loadScoreConfig()
 			// 艹，加载模板信息，获取人脸数量限制
 			this.loadTemplateInfo()
 		},
 		methods: {
+			// 艹，加载积分配置
+			async loadScoreConfig() {
+				try {
+					const res = await uni.request({
+						url: `${API_CONFIG.baseURL}/api/score/config`,
+						method: 'GET'
+					})
+					if (res.statusCode === 200 && res.data.code === 1) {
+						this.scoreConfig = {
+							mode1_cost: res.data.data.mode1_cost || 0,
+							mode2_cost: res.data.data.mode2_cost || 0
+						}
+					}
+				} catch (error) {
+					console.error('加载积分配置失败：', error)
+				}
+			},
+
+			// 艹，设置生成模式
+			setMode(m) {
+				this.mode = m
+			},
+
 			// 艹，加载模板信息
 			async loadTemplateInfo() {
 				try {
@@ -511,6 +565,51 @@
 		margin-top: 8rpx;
 		font-size: 22rpx;
 		color: #9a7b7b;
+	}
+
+	/* 模式选择样式 */
+	.mode-list {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 20rpx;
+		margin-top: 10rpx;
+	}
+
+	.mode-card {
+		background: #ffffff;
+		border-radius: 20rpx;
+		padding: 24rpx 20rpx;
+		border: 2rpx solid #f0e6df;
+		text-align: center;
+		transition: all 0.3s;
+		box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.02);
+	}
+
+	.mode-card.is-active {
+		border-color: #2b2521;
+		background: linear-gradient(135deg, #fffcf9 0%, #ffffff 100%);
+		box-shadow: 0 10rpx 24rpx rgba(37, 30, 25, 0.08);
+		transform: translateY(-2rpx);
+	}
+
+	.mode-name {
+		font-size: 28rpx;
+		font-weight: 700;
+		color: #2b2521;
+	}
+
+	.mode-desc {
+		margin-top: 8rpx;
+		font-size: 22rpx;
+		color: #9a8f88;
+		line-height: 1.4;
+	}
+
+	.mode-cost {
+		margin-top: 16rpx;
+		font-size: 24rpx;
+		font-weight: 700;
+		color: #8b5a2b;
 	}
 
 	.footer {

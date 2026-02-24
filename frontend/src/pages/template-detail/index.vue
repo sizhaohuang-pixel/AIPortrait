@@ -29,26 +29,8 @@
 			</view>
 		</view>
 
-		<view class="section">
-			<view class="section-title">选择模式</view>
-			<view class="mode-list">
-				<view
-					:class="['mode-card', activeMode === 1 ? 'is-active' : '']"
-					@tap="setMode(1)"
-				>
-					<view class="mode-name">梦幻模式</view>
-					<view class="mode-desc">适合艺术写真</view>
-					<view class="mode-cost">消耗 {{ scoreConfig.mode1_cost || '-' }} 积分</view>
-				</view>
-				<view
-					:class="['mode-card', activeMode === 2 ? 'is-active' : '']"
-					@tap="setMode(2)"
-				>
-					<view class="mode-name">专业模式</view>
-					<view class="mode-desc">高清专业效果</view>
-					<view class="mode-cost">消耗 {{ scoreConfig.mode2_cost || '-' }} 积分</view>
-				</view>
-			</view>
+		<view class="tip-section">
+			<text class="tip-text">模板仅供参考，生成的姿势、发型等略有区别</text>
 		</view>
 
 		<view class="footer">
@@ -74,12 +56,7 @@
 					tags: [],
 					sub_templates: []
 				},
-				activeSubId: 0,
-				activeMode: 1,  // 艹，默认选择梦幻模式
-				scoreConfig: {
-					mode1_cost: 0,
-					mode2_cost: 0
-				}
+				activeSubId: 0
 			}
 		},
 		computed: {
@@ -110,8 +87,6 @@
 		},
 		onLoad(query) {
 			const templateId = query.templateId || 0
-			// 艹，加载积分配置
-			this.loadScoreConfig()
 			if (templateId > 0) {
 				this.loadTemplateDetail(templateId)
 			} else {
@@ -125,19 +100,6 @@
 			}
 		},
 		methods: {
-			// 艹，加载积分配置
-			async loadScoreConfig() {
-				try {
-					const data = await this.request('/api/score/config')
-					this.scoreConfig = {
-						mode1_cost: data.mode1_cost || 0,
-						mode2_cost: data.mode2_cost || 0
-					}
-				} catch (error) {
-					console.error('加载积分配置失败：', error)
-				}
-			},
-
 			// 加载模板详情
 			async loadTemplateDetail(templateId) {
 				try {
@@ -190,11 +152,6 @@
 				this.activeSubId = subId
 			},
 
-			// 艹，选择模式
-			setMode(mode) {
-				this.activeMode = mode
-			},
-
 			// 跳转到上传照片页面
 			goToUpload() {
 				if (!this.activeSubId) {
@@ -210,9 +167,9 @@
 					return item.id === this.activeSubId
 				}, this)
 
-				// 艹，跳转到上传照片页面，传递模板信息和模式
+				// 艹，跳转到上传照片页面，不再传递模式参数，让那边自己选
 				uni.navigateTo({
-					url: `/pages/upload/index?templateId=${this.template.id}&subTemplateId=${this.activeSubId}&mode=${this.activeMode}&title=${encodeURIComponent(this.template.title)}&subTemplateName=${encodeURIComponent(subTemplate ? subTemplate.title : '')}`
+					url: `/pages/upload/index?templateId=${this.template.id}&subTemplateId=${this.activeSubId}&title=${encodeURIComponent(this.template.title)}&subTemplateName=${encodeURIComponent(subTemplate ? subTemplate.title : '')}`
 				})
 			}
 		}
@@ -325,51 +282,33 @@
 		background: #f3f3f3;
 	}
 
+	.tip-section {
+		padding: 20rpx 28rpx;
+		margin-top: 10rpx;
+	}
+
+	.tip-text {
+		font-size: 20rpx;
+		color: #9a8f88;
+		display: flex;
+		align-items: center;
+	}
+
+	.tip-text::before {
+		content: '';
+		width: 20rpx;
+		height: 20rpx;
+		margin-right: 8rpx;
+		background-color: #9a8f88;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E") no-repeat center / contain;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E") no-repeat center / contain;
+	}
+
 	@supports (aspect-ratio: 1 / 1) {
 		.hero-cover,
 		.sub-thumb {
 			height: auto;
 		}
-	}
-
-	.mode-list {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 16rpx;
-	}
-
-	.mode-card {
-		background: #ffffff;
-		border-radius: 20rpx;
-		padding: 24rpx 20rpx;
-		border: 2rpx solid #f0e6df;
-		text-align: center;
-		transition: all 0.3s;
-	}
-
-	.mode-card.is-active {
-		border-color: #2b2521;
-		background: linear-gradient(135deg, #f7efe9 0%, #ffffff 100%);
-		box-shadow: 0 10rpx 20rpx rgba(37, 30, 25, 0.12);
-	}
-
-	.mode-name {
-		font-size: 28rpx;
-		font-weight: 600;
-		color: #2b2521;
-	}
-
-	.mode-desc {
-		margin-top: 8rpx;
-		font-size: 22rpx;
-		color: #7a6f69;
-	}
-
-	.mode-cost {
-		margin-top: 12rpx;
-		font-size: 24rpx;
-		font-weight: 600;
-		color: #8b5a2b;
 	}
 
 	.footer {
@@ -383,15 +322,19 @@
 	}
 
 	.submit-btn {
-		background: #2b2521;
+		background: linear-gradient(135deg, #e85a4f 0%, #d43f33 100%);
 		color: #ffffff;
 		font-size: 30rpx;
 		font-weight: 600;
-		border-radius: 16rpx;
+		border-radius: 999rpx;
+		height: 88rpx;
+		line-height: 88rpx;
+		box-shadow: 0 10rpx 20rpx rgba(232, 90, 79, 0.25);
 	}
 
 	.submit-btn[disabled] {
 		background: #d9cfc8;
 		color: #ffffff;
+		box-shadow: none;
 	}
 </style>

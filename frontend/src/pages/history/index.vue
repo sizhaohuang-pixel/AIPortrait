@@ -2,7 +2,7 @@
 	<view class="page">
 		<view class="header">
 			<view class="title">我的相册</view>
-			<view class="sub">我生成的 AI 写真作品</view>
+			<view class="sub">我生成的写真作品</view>
 		</view>
 
 		<SkeletonLoader v-if="loading" />
@@ -186,11 +186,11 @@
 				})
 			},
 
-			// 删除记录
+			// 删除相册
 			showDeleteMenu(item) {
 				const self = this
 				uni.showActionSheet({
-					itemList: ['删除记录'],
+					itemList: ['删除相册'],
 					itemColor: '#ff4444',
 					success: function(res) {
 						if (res.tapIndex === 0) {
@@ -408,7 +408,8 @@
 	.empty-icon {
 		width: 160rpx;
 		height: 160rpx;
-		background-color: #ddd;
+		background-color: #2b2521;
+		opacity: 0.15;
 		margin-bottom: 40rpx;
 		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;
 		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E") no-repeat center / contain;

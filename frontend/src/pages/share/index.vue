@@ -23,8 +23,8 @@
 		</view>
 
 		<view class="footer-brand">
-			<view class="brand-title">AI写真</view>
-			<view class="brand-sub">把每一次灵感都留下来</view>
+			<view class="brand-title">非鱼影像</view>
+			<view class="brand-sub">留存每一刻心动瞬间</view>
 		</view>
 
 	</view>
@@ -102,6 +102,13 @@
 			return {
 				title: `快来看 ${this.owner ? this.owner.nickname : ''} 的 AI 写真，真的太美了！`,
 				path: `/pages/share/index?code=${this.shareCode}&idx=${this.targetIndex}`,
+				imageUrl: this.resultUrl
+			}
+		},
+		onShareTimeline() {
+			return {
+				title: `${this.owner ? this.owner.nickname : ''} 的 AI 写真大片，美翻了！`,
+				query: `code=${this.shareCode}&idx=${this.targetIndex}`,
 				imageUrl: this.resultUrl
 			}
 		}

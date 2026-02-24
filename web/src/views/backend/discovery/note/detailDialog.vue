@@ -38,8 +38,8 @@
                         <el-tag type="warning" style="margin-left: 10px">收藏: {{ baTable.form.items.collections_count }}</el-tag>
                         <el-tag type="info" style="margin-left: 10px">评论: {{ baTable.form.items.comments_count }}</el-tag>
                     </el-descriptions-item>
-                    <el-descriptions-item label="发布时间">{{ baTable.form.items.create_time }}</el-descriptions-item>
-                    <el-descriptions-item label="最后更新">{{ baTable.form.items.update_time }}</el-descriptions-item>
+                    <el-descriptions-item label="发布时间">{{ timeFormat(baTable.form.items.create_time) }}</el-descriptions-item>
+                    <el-descriptions-item label="最后更新">{{ timeFormat(baTable.form.items.update_time) }}</el-descriptions-item>
                 </el-descriptions>
             </div>
         </el-scrollbar>
@@ -49,7 +49,7 @@
 <script setup lang="ts">
 import { inject } from 'vue'
 import type baTableClass from '/@/utils/baTable'
-import { fullUrl } from '/@/utils/common'
+import { fullUrl, timeFormat } from '/@/utils/common'
 
 const baTable = inject('baTable') as baTableClass
 </script>

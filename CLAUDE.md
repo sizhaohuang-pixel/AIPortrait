@@ -12,6 +12,14 @@
 
 ## 变更记录 (Changelog)
 
+### 2026-02-22 10:00:00
+- **✨ 增强：全站动态分享文案配置化**
+  - 后端：在 `ScoreConfig` 系统中新增 6 个分享文案配置项（首页、结果页、发现页、笔记详情页）
+  - 后端：扩展 `app/api/controller/Score.php` 的 `config` 接口，统一下发分享配置
+  - 后端：增强 `app/admin/controller/score/Config.php`，支持非数值型配置项的批量保存
+  - 后台：新增 `web/src/views/backend/mini/config/index.vue` 专门管理小程序分享文案，并注册至“常规管理”菜单
+  - 前端：重构 `index/index.vue`, `preview/index.vue`, `discovery/index.vue`, `discovery/detail.vue`，实现分享文案的动态加载与展示
+
 ### 2026-02-21 08:15:00
 - **✨ 增强：全站互动图标（点赞/收藏）状态视觉优化**
   - 前端：重构 `discovery/detail.vue` 和 `discovery/index.vue` 中的点赞与收藏图标

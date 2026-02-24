@@ -103,10 +103,27 @@
 		<!-- 艹，辅助设置 -->
 		<view class="menu-section">
 			<view class="menu-list">
+				<view class="menu-item" @tap="goAgreement('custom')">
+					<view class="item-left">
+						<view class="item-icon icon-custom"></view>
+						<text>定制精修</text>
+					</view>
+					<view class="item-right">
+						<text class="item-desc">专业定制</text>
+						<text class="item-arrow">›</text>
+					</view>
+				</view>
 				<view class="menu-item" @tap="goAgreement('about')">
 					<view class="item-left">
 						<view class="item-icon icon-info"></view>
 						<text>关于我们</text>
+					</view>
+					<view class="item-right"><text class="item-arrow">›</text></view>
+				</view>
+				<view class="menu-item" @tap="goAgreement('user')">
+					<view class="item-left">
+						<view class="item-icon icon-user-agreement"></view>
+						<text>用户协议</text>
 					</view>
 					<view class="item-right"><text class="item-arrow">›</text></view>
 				</view>
@@ -117,17 +134,26 @@
 					</view>
 					<view class="item-right"><text class="item-arrow">›</text></view>
 				</view>
-				<view v-if="isLogin" class="menu-item logout-item" @tap="handleLogout">
+			</view>
+		</view>
+
+		<!-- 艹，退出登录：只有登录了才显摆，红色的警告色，谁点谁知道 -->
+		<view v-if="isLogin" class="menu-section">
+			<view class="menu-list">
+				<view class="menu-item logout-item" @tap="handleLogout">
 					<view class="item-left">
 						<view class="item-icon icon-logout"></view>
 						<text>退出登录</text>
+					</view>
+					<view class="item-right">
+						<text class="item-arrow">›</text>
 					</view>
 				</view>
 			</view>
 		</view>
 
 		<view class="footer">
-			<text>AIPortrait v1.2.2</text>
+			<text>AIPortrait v1.1.0 • Geek Aesthetic</text>
 		</view>
 	</view>
 </template>
@@ -497,6 +523,15 @@
 				&.icon-privacy {
 					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E") no-repeat center / contain;
 					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-custom {
+					background-color: #ffd700; /* 艹！给定制精修来个金色，显贵 */
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-user-agreement {
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14 2 14 8 20 8'/%3E%3Cline x1='16' y1='13' x2='8' y2='13'/%3E%3Cline x1='16' y1='17' x2='8' y2='17'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14 2 14 8 20 8'/%3E%3Cline x1='16' y1='13' x2='8' y2='13'/%3E%3Cline x1='16' y1='17' x2='8' y2='17'/%3E%3C/svg%3E") no-repeat center / contain;
 				}
 				&.icon-logout {
 					background-color: #ff5252;

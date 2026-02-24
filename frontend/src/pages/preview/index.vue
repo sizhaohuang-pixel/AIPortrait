@@ -33,9 +33,9 @@
 				<view class="action-btn" @tap.stop="save">
 					<view class="icon-save"></view>
 				</view>
-				<button class="action-btn share-btn" open-type="share">
+				<view class="action-btn share-btn" @tap.stop="handleShareClick">
 					<view class="icon-share"></view>
-				</button>
+				</view>
 			</view>
 		</view>
 
@@ -59,9 +59,15 @@
 			</view>
 		</view>
 
+		<!-- 艹，定制精修引导：放在信息栏和品牌栏之间，稳得很 -->
+		<view class="custom-guide">
+			<text>对结果不满意？可以联系我们</text>
+			<text class="custom-link" @tap="goCustom">定制精修</text>
+		</view>
+
 		<view class="footer-brand">
-			<view class="brand-title">AI写真</view>
-			<view class="brand-sub">把每一次灵感都留下来</view>
+			<view class="brand-title">非鱼影像</view>
+			<view class="brand-sub">留存每一刻心动瞬间</view>
 		</view>
 
 		<!-- 艹，自定义全屏预览层，带操作按钮 -->
@@ -104,9 +110,9 @@
 				<view class="action-btn is-white" @tap.stop="save">
 					<view class="icon-save"></view>
 				</view>
-				<button class="action-btn share-btn is-white" open-type="share">
+				<view class="action-btn share-btn is-white" @tap.stop="handleShareClick">
 					<view class="icon-share"></view>
-				</button>
+				</view>
 			</view>
 
 			<view class="preview-close" @tap="showPreview = false">
@@ -116,11 +122,44 @@
 			<view class="preview-badge">{{ activeIndex + 1 }} / {{ results.length }}</view>
 		</view>
 
+		<!-- 艹，老王牌：底部分享菜单 -->
+		<view v-if="showShareMenu" class="share-menu-mask" @tap="showShareMenu = false" @touchmove.stop.prevent>
+			<view class="share-menu-content" @tap.stop>
+				<view class="share-menu-title">分享到</view>
+				<view class="share-menu-grid">
+					<button class="share-menu-item" open-type="share" @tap="showShareMenu = false">
+						<view class="share-menu-icon icon-wechat-box">
+							<view class="icon-wechat"></view>
+						</view>
+						<text>发送给朋友</text>
+					</button>
+					<view class="share-menu-item" @tap="handleShareMoment">
+						<view class="share-menu-icon icon-moment-box">
+							<view class="icon-moment"></view>
+						</view>
+						<text>分享到朋友圈</text>
+					</view>
+				</view>
+				<view class="share-menu-cancel" @tap="showShareMenu = false">取消</view>
+			</view>
+		</view>
+
+		<!-- 分享引导蒙层 -->
+		<view v-if="showShareGuide" class="share-guide" @tap="showShareGuide = false" @touchmove.stop.prevent>
+			<view class="guide-arrow"></view>
+			<view class="guide-content">
+				<text class="guide-text">点击右上角 “...”</text>
+				<text class="guide-text">选择 “分享到朋友圈”</text>
+				<button class="guide-btn">我知道了</button>
+			</view>
+		</view>
+
 	</view>
 </template>
 
 <script>
-	import { getTaskProgress, deleteResultImage } from '../../services/portrait.js'
+	import { getTaskProgress, deleteResultImage, deleteHistory } from '../../services/portrait.js'
+	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
 		data() {
@@ -132,7 +171,13 @@
 				loading: true,
 				showSwiper: false,
 				previewLock: false,
-				showPreview: false
+				showPreview: false,
+				showShareMenu: false,
+				showShareGuide: false,
+				shareConfig: {
+					share_friend_title: '快来看看我的AI写真！这一张真的绝了~',
+					share_timeline_title: '我的AI写真大片，快来一起变美！'
+				}
 			}
 		},
 		computed: {
@@ -152,6 +197,8 @@
 		},
 		onLoad(query) {
 			this.taskId = parseInt(query.taskId) || 0
+			// 艹，加载分享配置
+			this.loadConfig()
 			if (this.taskId > 0) {
 				this.loadResults()
 			} else {
@@ -181,7 +228,7 @@
 			const currentUrl = currentItem ? currentItem.result_url : ''
 			const shareCode = this.task ? this.task.share_code : ''
 			return {
-				title: '快来看看我的AI写真！这一张真的绝了~',
+				title: this.shareConfig.share_friend_title || '快来看看我的AI写真！这一张真的绝了~',
 				path: `/pages/share/index?code=${shareCode}&idx=${this.activeIndex}`,
 				imageUrl: currentUrl || ''
 			}
@@ -193,13 +240,30 @@
 			const currentUrl = currentItem ? currentItem.result_url : ''
 			const shareCode = this.task ? this.task.share_code : ''
 			return {
-				title: '我的AI写真大片，快来一起变美！',
+				title: this.shareConfig.share_timeline_title || '我的AI写真大片，快来一起变美！',
 				query: `code=${shareCode}&idx=${this.activeIndex}`,
 				imageUrl: currentUrl || ''
 			}
 		},
 
 		methods: {
+			// 艹，加载全局配置
+			async loadConfig() {
+				try {
+					const res = await uni.request({
+						url: `${API_CONFIG.baseURL}/api/score/config`,
+						method: 'GET'
+					})
+					if (res.statusCode === 200 && res.data.code === 1) {
+						this.shareConfig = {
+							share_friend_title: res.data.data.share_friend_title,
+							share_timeline_title: res.data.data.share_timeline_title
+						}
+					}
+				} catch (e) {
+					console.error('加载分享配置失败：', e)
+				}
+			},
 			onSwiperChange(e) {
 				this.activeIndex = e.detail.current
 			},
@@ -326,6 +390,21 @@
 				})
 			},
 
+			goCustom() {
+				uni.navigateTo({
+					url: '/pages/agreement/index?type=custom'
+				})
+			},
+
+			handleShareClick() {
+				this.showShareMenu = true
+			},
+
+			handleShareMoment() {
+				this.showShareMenu = false
+				this.showShareGuide = true
+			},
+
 			openPreview() {
 				// 艹，物理防抖，防止点太快。而且没数据别特么乱跳。
 				if (this.previewLock || !this.results || this.results.length === 0) return
@@ -364,7 +443,7 @@
 					this.results.splice(targetIndex, 1)
 
 					if (this.results.length === 0) {
-						// 删光了，滚回历史页
+						// 滚回历史页
 						setTimeout(() => {
 							uni.redirectTo({ url: '/pages/history/index' })
 						}, 500)
@@ -419,8 +498,8 @@
 	}
 
 	.action-btn {
-		width: 80rpx;
-		height: 80rpx;
+		width: 72rpx;
+		height: 72rpx;
 		background: rgba(255, 255, 255, 0.45);
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
@@ -446,18 +525,18 @@
 	}
 
 	.icon-trash {
-		width: 40rpx;
-		height: 40rpx;
+		width: 36rpx;
+		height: 36rpx;
 		background-color: #e85a4f;
-		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 6 5 6 21 6'%3E%3C/polyline%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'%3E%3C/path%3E%3Cline x1='10' y1='11' x2='10' y2='17'%3E%3C/line%3E%3Cline x1='14' y1='11' x2='14' y2='17'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
-		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 6 5 6 21 6'%3E%3C/polyline%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'%3E%3C/path%3E%3Cline x1='10' y1='11' x2='10' y2='17'%3E%3C/line%3E%3Cline x1='14' y1='11' x2='14' y2='17'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 6 5 6 21 6'%3E%3C/polyline%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'%3E%3C/path%3E%3C/svg%3E") no-repeat center;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 6 5 6 21 6'%3E%3C/polyline%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'%3E%3C/path%3E%3C/svg%3E") no-repeat center;
 		-webkit-mask-size: contain;
 		mask-size: contain;
 	}
 
 	.icon-save {
-		width: 40rpx;
-		height: 40rpx;
+		width: 36rpx;
+		height: 36rpx;
 		background-color: #2b2521;
 		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='7 10 12 15 17 10'%3E%3C/polyline%3E%3Cline x1='12' y1='15' x2='12' y2='3'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
 		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='7 10 12 15 17 10'%3E%3C/polyline%3E%3Cline x1='12' y1='15' x2='12' y2='3'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
@@ -466,8 +545,8 @@
 	}
 
 	.icon-share {
-		width: 40rpx;
-		height: 40rpx;
+		width: 36rpx;
+		height: 36rpx;
 		background-color: #2b2521;
 		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='18' cy='5' r='3'%3E%3C/circle%3E%3Ccircle cx='6' cy='12' r='3'%3E%3C/circle%3E%3Ccircle cx='18' cy='19' r='3'%3E%3C/circle%3E%3Cline x1='8.59' y1='13.51' x2='15.42' y2='17.49'%3E%3C/line%3E%3Cline x1='15.41' y1='6.51' x2='8.59' y2='10.49'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
 		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='18' cy='5' r='3'%3E%3C/circle%3E%3Ccircle cx='6' cy='12' r='3'%3E%3C/circle%3E%3Ccircle cx='18' cy='19' r='3'%3E%3C/circle%3E%3Cline x1='8.59' y1='13.51' x2='15.42' y2='17.49'%3E%3C/line%3E%3Cline x1='15.41' y1='6.51' x2='8.59' y2='10.49'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
@@ -476,16 +555,16 @@
 	}
 
 	.icon-publish {
-		width: 40rpx;
-		height: 40rpx;
+		width: 36rpx;
+		height: 36rpx;
 		background-color: #2b2521;
-		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='17 8 12 3 7 8'%3E%3C/polyline%3E%3Cline x1='12' y1='3' x2='12' y2='15'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
-		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='17 8 12 3 7 8'%3E%3C/polyline%3E%3Cline x1='12' y1='3' x2='12' y2='15'%3E%3C/line%3E%3C/svg%3E") no-repeat center;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'%3E%3C/line%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'%3E%3C/polygon%3E%3C/svg%3E") no-repeat center;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'%3E%3C/line%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'%3E%3C/polygon%3E%3C/svg%3E") no-repeat center;
 		-webkit-mask-size: contain;
 		mask-size: contain;
 	}
 
-	.icon-publish.is-white {
+	.icon-publish.is-white, .icon-save.is-white, .icon-share.is-white {
 		background-color: #ffffff;
 	}
 
@@ -586,6 +665,20 @@
 		color: #2b2521;
 	}
 
+	.custom-guide {
+		margin: 24rpx 28rpx 0;
+		text-align: center;
+		font-size: 24rpx;
+		color: #9a8f88;
+	}
+
+	.custom-link {
+		color: #e85a4f;
+		font-weight: 600;
+		text-decoration: underline;
+		margin-left: 4rpx;
+	}
+
 	.footer-brand {
 		margin: 18rpx 28rpx 0;
 		padding: 18rpx 20rpx;
@@ -659,12 +752,17 @@
 	}
 
 	.preview-action-bar .action-btn {
-		background: rgba(255, 255, 255, 0.2);
+		background: rgba(255, 255, 255, 0.15);
 		border: 1rpx solid rgba(255, 255, 255, 0.1);
 	}
 
-	.preview-action-bar .action-btn.is-white .icon-save,
-	.preview-action-bar .action-btn.is-white .icon-share {
+	.preview-action-bar .action-btn .icon-trash {
+		background-color: #e85a4f; /* 艹，预览模式删除也得是红的，醒目！ */
+	}
+
+	.preview-action-bar .action-btn .icon-save,
+	.preview-action-bar .action-btn .icon-share,
+	.preview-action-bar .action-btn .icon-publish {
 		background-color: #ffffff;
 	}
 
@@ -700,6 +798,184 @@
 		color: #ffffff;
 		font-size: 24rpx;
 		backdrop-filter: blur(10px);
+	}
+
+	/* 艹，底部分享菜单样式，保持全站统一 */
+	.share-menu-mask {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100vw;
+		height: 100vh;
+		background: rgba(0,0,0,0.4);
+		z-index: 20000;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
+		backdrop-filter: blur(4px);
+	}
+
+	.share-menu-content {
+		background: rgba(255, 255, 255, 0.98);
+		border-radius: 40rpx 40rpx 0 0;
+		padding: 40rpx 30rpx calc(40rpx + env(safe-area-inset-bottom));
+		animation: slideUp 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+	}
+
+	.share-menu-title {
+		text-align: center;
+		font-size: 24rpx;
+		color: #999;
+		margin-bottom: 50rpx;
+	}
+
+	.share-menu-grid {
+		display: flex;
+		justify-content: space-around;
+		margin-bottom: 40rpx;
+	}
+
+	.share-menu-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		background: none;
+		padding: 0;
+		margin: 0;
+		line-height: 1.5;
+		border: none;
+		width: 200rpx;
+	}
+
+	.share-menu-item::after { border: none; }
+
+	.share-menu-icon {
+		width: 110rpx;
+		height: 110rpx;
+		border-radius: 35rpx;
+		margin-bottom: 20rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+	}
+
+	.icon-wechat-box {
+		background: #07c160;
+		box-shadow: 0 8rpx 20rpx rgba(7, 193, 96, 0.2);
+	}
+
+	.icon-moment-box {
+		background: #ffb800;
+		box-shadow: 0 8rpx 20rpx rgba(255, 184, 0, 0.2);
+	}
+
+	.icon-wechat {
+		width: 54rpx;
+		height: 54rpx;
+		background-color: #fff;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-12.7 8.19 8.19 0 0 1 5.1 1.8'/%3E%3Ccircle cx='9' cy='11' r='1'/%3E%3Ccircle cx='15' cy='11' r='1'/%3E%3C/svg%3E") no-repeat center;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-12.7 8.19 8.19 0 0 1 5.1 1.8'/%3E%3Ccircle cx='9' cy='11' r='1'/%3E%3Ccircle cx='15' cy='11' r='1'/%3E%3C/svg%3E") no-repeat center;
+		-webkit-mask-size: contain;
+		mask-size: contain;
+	}
+
+	.icon-moment {
+		width: 54rpx;
+		height: 54rpx;
+		background-color: #fff;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cline x1='12' y1='2' x2='12' y2='4'/%3E%3Cline x1='12' y1='20' x2='12' y2='22'/%3E%3Cline x1='2' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='22' y2='12'/%3E%3C/svg%3E") no-repeat center;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cline x1='12' y1='2' x2='12' y2='4'/%3E%3Cline x1='12' y1='20' x2='12' y2='22'/%3E%3Cline x1='2' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='22' y2='12'/%3E%3C/svg%3E") no-repeat center;
+		-webkit-mask-size: contain;
+		mask-size: contain;
+	}
+
+	.share-menu-item:active .share-menu-icon {
+		transform: scale(0.9);
+		opacity: 0.8;
+	}
+
+	.share-menu-item text {
+		font-size: 26rpx;
+		color: #333;
+		font-weight: 500;
+	}
+
+	.share-menu-cancel {
+		text-align: center;
+		height: 110rpx;
+		line-height: 110rpx;
+		font-size: 32rpx;
+		color: #333;
+		border-top: 1rpx solid #f2f2f2;
+		margin-top: 20rpx;
+		font-weight: 500;
+	}
+
+	@keyframes slideUp {
+		from { transform: translateY(100%); }
+		to { transform: translateY(0); }
+	}
+
+	/* 分享引导蒙层样式 */
+	.share-guide {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100vw;
+		height: 100vh;
+		background: rgba(0, 0, 0, 0.85);
+		backdrop-filter: blur(8px);
+		z-index: 30000;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	.guide-arrow {
+		position: absolute;
+		top: calc(20rpx + env(safe-area-inset-top));
+		right: 40rpx;
+		width: 160rpx;
+		height: 160rpx;
+		background-color: #fff;
+		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17L17 7M17 7H7M17 7V17'/%3E%3C/svg%3E") no-repeat center;
+		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17L17 7M17 7H7M17 7V17'/%3E%3C/svg%3E") no-repeat center;
+		-webkit-mask-size: contain;
+		mask-size: contain;
+		animation: bounce 1s infinite alternate;
+	}
+
+	.guide-content {
+		margin-top: 300rpx;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 20rpx;
+	}
+
+	.guide-text {
+		color: #fff;
+		font-size: 36rpx;
+		font-weight: bold;
+		text-shadow: 0 4rpx 10rpx rgba(0,0,0,0.5);
+	}
+
+	.guide-btn {
+		margin-top: 60rpx;
+		width: 240rpx;
+		height: 80rpx;
+		line-height: 80rpx;
+		background: #fff;
+		color: #2b2521;
+		border-radius: 40rpx;
+		font-size: 28rpx;
+		font-weight: bold;
+	}
+
+	@keyframes bounce {
+		from { transform: translate(0, 0); }
+		to { transform: translate(10rpx, -20rpx); }
 	}
 
 </style>

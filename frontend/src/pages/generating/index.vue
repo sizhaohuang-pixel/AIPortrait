@@ -16,9 +16,9 @@
 					<view class="bar" :style="{ width: progress + '%' }"></view>
 				</view>
 				<view class="tip">当前进度 {{ progress }}%</view>
-				<view class="sub-tip">可先退出，稍后在历史记录查看</view>
+				<view class="sub-tip">先去逛逛，稍后在我的相册查看</view>
 				<view class="actions">
-					<button class="ghost-btn" @tap="exit">退出生成</button>
+					<button class="ghost-btn" @tap="exit">先去逛逛</button>
 					<button class="primary-btn" :disabled="status !== 1" @tap="goPreview">查看结果</button>
 				</view>
 			</view>

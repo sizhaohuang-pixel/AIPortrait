@@ -87,7 +87,10 @@
 				loading: false,
 				finished: false,
 				leftList: [],
-				rightList: []
+				rightList: [],
+				shareConfig: {
+					discovery_share_title: '发现更多惊艳的AI写真作品'
+				}
 			}
 		},
 		onLoad(options) {
@@ -96,6 +99,8 @@
 			if (this.my) {
 				uni.setNavigationBarTitle({ title: '我的笔记' });
 			}
+			// 艹，加载分享配置
+			this.loadShareConfig()
 		},
 		onShow() {
 			console.log('Discovery Page onShow');
@@ -163,6 +168,16 @@
 					uni.stopPullDownRefresh();
 				}
 			},
+			async loadShareConfig() {
+				try {
+					const res = await get('/api/score/config')
+					if (res.discovery_share_title) {
+						this.shareConfig.discovery_share_title = res.discovery_share_title
+					}
+				} catch (e) {
+					console.error('Failed to load share config:', e)
+				}
+			},
 			distributeList(newList) {
 				newList.forEach((item) => {
 					// 简单的瀑布流分配
@@ -183,6 +198,18 @@
 			},
 			goHome() {
 				uni.switchTab({ url: '/pages/index/index' });
+			}
+		},
+		onShareAppMessage() {
+			return {
+				title: this.shareConfig.discovery_share_title || '这就是AI的审美吗？这些写真也太好看了！',
+				path: '/pages/discovery/index'
+			}
+		},
+		onShareTimeline() {
+			return {
+				title: this.shareConfig.discovery_share_title || '在这里，遇见最美的AI写真',
+				path: '/pages/discovery/index'
 			}
 		}
 	}
