@@ -67,8 +67,22 @@
 
 		<!-- 艹，业务列表：回归极简风格 -->
 		<view class="menu-section">
+			<view class="invite-entry" @tap.stop="handleMenuTap" data-url="/pages/invite/index" data-need-login="1">
+				<view class="invite-entry-left">
+					<view class="item-icon icon-invite"></view>
+					<view class="invite-entry-text">
+						<text class="invite-entry-title">邀请好友</text>
+						<text class="invite-entry-sub">分享给新用户，登录即可得积分</text>
+					</view>
+				</view>
+				<view class="invite-entry-right">
+					<text class="invite-badge">重点推荐</text>
+					<text class="item-arrow">›</text>
+				</view>
+			</view>
+
 			<view class="menu-list">
-				<view class="menu-item" @tap="goHistory">
+				<view class="menu-item" @tap="handleMenuTap" data-url="/pages/history/index" data-need-login="1">
 					<view class="item-left">
 						<view class="item-icon icon-album"></view>
 						<text>我的相册</text>
@@ -78,7 +92,7 @@
 						<text class="item-arrow">›</text>
 					</view>
 				</view>
-				<view class="menu-item" @tap="goMyNotes">
+				<view class="menu-item" @tap="handleMenuTap" data-url="/pages/discovery/my" data-need-login="1">
 					<view class="item-left">
 						<view class="item-icon icon-note"></view>
 						<text>我的笔记</text>
@@ -88,7 +102,7 @@
 						<text class="item-arrow">›</text>
 					</view>
 				</view>
-				<view class="menu-item" @tap="goScoreDetail">
+				<view class="menu-item" @tap="handleMenuTap" data-url="/pages/score/detail" data-need-login="1">
 					<view class="item-left">
 						<view class="item-icon icon-detail"></view>
 						<text>积分明细</text>
@@ -153,7 +167,8 @@
 		</view>
 
 		<view class="footer">
-			<text>AIPortrait v1.1.0 • Geek Aesthetic</text>
+			<text v-if="siteConfig.recordNumber">{{ siteConfig.recordNumber }}</text>
+			<text v-if="siteConfig.electricIncreaseNumber">{{ siteConfig.electricIncreaseNumber }}</text>
 		</view>
 	</view>
 </template>
@@ -169,7 +184,8 @@
 				isLogin: false,
 				userInfo: { nickname: '', mobile: '', avatar: '' },
 				scoreInfo: { score: 0, expire_time: 0, expire_days: 0 },
-				userStats: { received_likes: 0, received_collections: 0, fans_count: 0, follow_count: 0 }
+				userStats: { received_likes: 0, received_collections: 0, fans_count: 0, follow_count: 0 },
+				siteConfig: { recordNumber: '', electricIncreaseNumber: '' }
 			}
 		},
 		computed: {
@@ -212,6 +228,7 @@
 		},
 		onShow() {
 			this.checkLoginStatus()
+			this.getSiteConfig()
 			if (this.isLogin) {
 				this.getScoreInfo()
 				this.getUserStats()
@@ -238,6 +255,18 @@
 					console.error('获取积分信息失败:', error)
 				}
 			},
+			async getSiteConfig() {
+				try {
+					const data = await get('/api/index/index')
+					const site = data && data.site ? data.site : {}
+					this.siteConfig = {
+						recordNumber: site.recordNumber || '',
+						electricIncreaseNumber: site.electricIncreaseNumber || ''
+					}
+				} catch (error) {
+					console.error('获取站点配置失败:', error)
+				}
+			},
 			getUserStats() {
 				get('/api/user/info').then(res => {
 					this.userStats = res.stats
@@ -255,21 +284,27 @@
 				if (!requireLogin()) return
 				uni.navigateTo({ url: `/pages/user/${pageType}-list?type=${listType}` })
 			},
+			handleMenuTap(e) {
+				const url = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.url : ''
+				const needLogin = String(e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.needLogin : '0') === '1'
+				if (!url) return
+				if (needLogin && !requireLogin()) return
+				uni.navigateTo({ url })
+			},
 			goScoreDetail() {
-				if (!requireLogin()) return
-				uni.navigateTo({ url: '/pages/score/detail' })
+				this.handleMenuTap({ currentTarget: { dataset: { url: '/pages/score/detail', needLogin: '1' } } })
+			},
+			goInvite() {
+				this.handleMenuTap({ currentTarget: { dataset: { url: '/pages/invite/index', needLogin: '1' } } })
 			},
 			goRecharge() {
-				if (!requireLogin()) return
-				uni.navigateTo({ url: '/pages/score/recharge' })
+				this.handleMenuTap({ currentTarget: { dataset: { url: '/pages/score/recharge', needLogin: '1' } } })
 			},
 			goHistory() {
-				if (!requireLogin()) return
-				uni.navigateTo({ url: '/pages/history/index' })
+				this.handleMenuTap({ currentTarget: { dataset: { url: '/pages/history/index', needLogin: '1' } } })
 			},
 			goMyNotes() {
-				if (!requireLogin()) return
-				uni.navigateTo({ url: '/pages/discovery/my' })
+				this.handleMenuTap({ currentTarget: { dataset: { url: '/pages/discovery/my', needLogin: '1' } } })
 			},
 			goAgreement(type) {
 				uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
@@ -481,6 +516,50 @@
 		overflow: hidden;
 	}
 
+	.invite-entry {
+		background: linear-gradient(90deg, #fff4ed 0%, #fffaf7 100%);
+		border: 1rpx solid #f7d8c8;
+		border-radius: 24rpx;
+		padding: 28rpx 24rpx;
+		margin-bottom: 16rpx;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.invite-entry-left {
+		display: flex;
+		align-items: center;
+	}
+
+	.invite-entry-text {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.invite-entry-title {
+		font-size: 30rpx;
+		font-weight: 700;
+		color: #7f352b;
+	}
+
+	.invite-entry-sub {
+		font-size: 22rpx;
+		color: #c06a52;
+		margin-top: 6rpx;
+	}
+
+	.invite-entry-right {
+		display: flex;
+		align-items: center;
+
+		.item-arrow {
+			color: #e85a4f;
+			font-size: 34rpx;
+			margin-left: 10rpx;
+		}
+	}
+
 	.menu-item {
 		display: flex;
 		align-items: center;
@@ -515,6 +594,11 @@
 				&.icon-detail {
 					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='6' x2='21' y2='6'/%3E%3Cline x1='8' y1='12' x2='21' y2='12'/%3E%3Cline x1='8' y1='18' x2='21' y2='18'/%3E%3Cline x1='3' y1='6' x2='3.01' y2='6'/%3E%3Cline x1='3' y1='12' x2='3.01' y2='12'/%3E%3Cline x1='3' y1='18' x2='3.01' y2='18'/%3E%3C/svg%3E") no-repeat center / contain;
 					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='6' x2='21' y2='6'/%3E%3Cline x1='8' y1='12' x2='21' y2='12'/%3E%3Cline x1='8' y1='18' x2='21' y2='18'/%3E%3Cline x1='3' y1='6' x2='3.01' y2='6'/%3E%3Cline x1='3' y1='12' x2='3.01' y2='12'/%3E%3Cline x1='3' y1='18' x2='3.01' y2='18'/%3E%3C/svg%3E") no-repeat center / contain;
+				}
+				&.icon-invite {
+					background-color: #e85a4f;
+					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 8a3 3 0 1 1 0 6'/%3E%3Cpath d='M6 8a3 3 0 1 0 0 6'/%3E%3Cpath d='M8 14h8'/%3E%3Cpath d='M12 5v14'/%3E%3C/svg%3E") no-repeat center / contain;
+					-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 8a3 3 0 1 1 0 6'/%3E%3Cpath d='M6 8a3 3 0 1 0 0 6'/%3E%3Cpath d='M8 14h8'/%3E%3Cpath d='M12 5v14'/%3E%3C/svg%3E") no-repeat center / contain;
 				}
 				&.icon-info {
 					mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E") no-repeat center / contain;
@@ -553,9 +637,23 @@
 		.item-left { color: #ff5252; }
 	}
 
+	.invite-badge {
+		font-size: 20rpx;
+		color: #ffffff;
+		background: #e85a4f;
+		border-radius: 999rpx;
+		padding: 4rpx 12rpx;
+		margin-right: 10rpx;
+	}
+
 	.footer {
 		text-align: center;
 		margin-top: 40rpx;
-		text { font-size: 20rpx; color: #ccc; letter-spacing: 1rpx; }
+		text {
+			display: block;
+			font-size: 20rpx;
+			color: #ccc;
+			line-height: 1.8;
+		}
 	}
 </style>

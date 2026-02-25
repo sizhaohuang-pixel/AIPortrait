@@ -22,7 +22,7 @@ export async function mobileLogin(mobile, captcha) {
 	const data = await post('/api/user/mobileLogin', {
 		mobile,
 		captcha
-	})
+	}, { needToken: false })
 	// 后端返回 { userInfo: {...}, routePath: "..." }
 	// 我们只返回 userInfo
 	return data.userInfo
@@ -33,14 +33,16 @@ export async function mobileLogin(mobile, captcha) {
  * @param {string} code - getPhoneNumber 返回的 code
  * @param {string} nickname - 微信昵称
  * @param {string} avatar - 微信头像
+ * @param {number|string} inviterId - 邀请人ID（可选）
  * @returns {Promise<object>} userInfo
  */
-export async function wechatLogin(code, nickname = '', avatar = '') {
+export async function wechatLogin(code, nickname = '', avatar = '', inviterId = 0) {
 	const data = await post('/api/user/wechatLogin', {
 		code,
 		nickname,
-		avatar
-	})
+		avatar,
+		inviter_id: Number(inviterId) || 0
+	}, { needToken: false })
 	// 后端返回 { userInfo: {...}, routePath: "..." }
 	// 我们只返回 userInfo
 	return data.userInfo

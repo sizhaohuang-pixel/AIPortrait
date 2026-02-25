@@ -32,7 +32,7 @@
 			</view>
 		</view>
 
-		<!-- 艹，新用户完善资料弹窗 -->
+		<!-- 新用户完善资料弹窗 -->
 		<view class="profile-modal" v-if="showProfileModal">
 			<view class="modal-mask"></view>
 			<view class="modal-content">
@@ -61,27 +61,49 @@
 <script>
 import { saveLoginInfo } from '../../utils/auth.js'
 import { wechatLogin } from '../../services/user.js'
-import { post, uploadFile } from '../../services/request.js'
+import { get, post, uploadFile } from '../../services/request.js'
 import { API_CONFIG } from '../../services/config.js'
 
 export default {
 	data() {
 		return {
 			loading: false,
+			loggingIn: false,
 			showProfileModal: false,
 			submitting: false,
 			tempAvatar: '',
 			tempNickname: '',
-			userInfo: null
+			userInfo: null,
+			inviterId: 0
 		}
 	},
+	onLoad(query) {
+		this.initInviterId(query)
+	},
 	methods: {
-		/**
-		 * 处理微信授权获取手机号
-		 * 艹，改用新版 code 模式，彻底解决解密失败
-		 */
+		initInviterId(query = {}) {
+			let inviterId = Number(query.inviter_id || 0)
+			const scene = query.scene ? decodeURIComponent(query.scene) : ''
+			if (!inviterId && scene) {
+				const pairs = String(scene).split('&')
+				pairs.forEach(pair => {
+					const [k, v] = pair.split('=')
+					if (k === 'inviter_id') {
+						inviterId = Number(v || 0)
+					}
+				})
+			}
+			if (inviterId > 0) {
+				this.inviterId = inviterId
+				uni.setStorageSync('pending_inviter_id', inviterId)
+			} else {
+				this.inviterId = Number(uni.getStorageSync('pending_inviter_id') || 0)
+			}
+		},
 		async handleGetPhoneNumber(e) {
-			console.log('=== 微信授权回调 (新版) ===', e.detail)
+			if (this.loggingIn || this.loading) {
+				return
+			}
 
 			if (!e.detail.code) {
 				uni.showToast({
@@ -92,18 +114,17 @@ export default {
 			}
 
 			this.loading = true
+			this.loggingIn = true
 
 			try {
-				// 1. 调用后端接口，直接传 code
-				const userInfo = await wechatLogin(e.detail.code)
+				const inviteId = this.getPendingInviterId()
+				const userInfo = await this.requestWechatLogin(e.detail.code, inviteId)
 				this.userInfo = userInfo
 
-				// 2. 保存登录信息
 				saveLoginInfo(userInfo)
+				uni.removeStorageSync('pending_inviter_id')
 
-				// 3. 判断是否需要完善资料
-				// 艹，如果昵称是默认的（脱敏手机号），或者是新注册的，就弹窗
-				const isNewUser = !userInfo.nickname || /1[3-9]\d\*\*\*\*\d{4}/.test(userInfo.nickname)
+				const isNewUser = this.needCompleteProfile(userInfo)
 
 				if (isNewUser) {
 					this.showProfileModal = true
@@ -119,7 +140,14 @@ export default {
 					this.jumpToMine()
 				}
 			} catch (error) {
-				console.error('登录失败：', error)
+				if (error && Number(error.code) === 303) {
+					uni.showToast({
+						title: '您已登录',
+						icon: 'none'
+					})
+					this.jumpToMine()
+					return
+				}
 				uni.showModal({
 					title: '登录失败',
 					content: error.message || '请稍后重试',
@@ -127,69 +155,29 @@ export default {
 				})
 			} finally {
 				this.loading = false
+				this.loggingIn = false
 			}
 		},
 
-		/**
-		 * 处理头像选择
-		 */
 		async onChooseAvatar(e) {
 			const { avatarUrl } = e.detail
-			console.log('选中头像:', avatarUrl)
 
-			// 艹，上传头像到后端
 			try {
 				uni.showLoading({ title: '上传中...' })
-				// 使用封装好的 uploadFile
-				let fullUrl = await uploadFile(avatarUrl)
-				console.log('原始上传返回:', fullUrl)
-
-				// 艹，终极绝杀：强行处理所有的 localhost 异常 URL
-				// 1. 先把 // 换成 http://（微信模拟器会自作聪明补 https）
-				if (fullUrl.startsWith('//')) {
-					fullUrl = 'http:' + fullUrl
-				}
-
-				// 2. 如果是 https://localhost，强行降级成 http://localhost
-				// 小程序渲染层不支持 localhost 的 https
-				fullUrl = fullUrl.replace(/^https:\/\/(localhost|127\.0\.0\.1)/i, 'http://$1')
-
-				// 3. 同步 baseURL 逻辑（仅当 baseURL 不是本地时才换，本地直接走 http://localhost）
-				const baseURL = API_CONFIG.baseURL
-				if (baseURL && !baseURL.includes('localhost') && !baseURL.includes('127.0.0.1')) {
-					const baseMatch = baseURL.match(/^(https?:\/\/[^\/]+)/i)
-					if (baseMatch) {
-						fullUrl = fullUrl.replace(/^http?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, baseMatch[1])
-					}
-				}
-
-				// 4. 艹，最后补丁：确保它绝对不是 // 开头
-				if (fullUrl.startsWith('//')) {
-					fullUrl = 'http:' + fullUrl
-				}
-
-				this.tempAvatar = fullUrl
-				console.log('老王核武器修正后:', this.tempAvatar)
+				const rawUrl = await uploadFile(avatarUrl)
+				this.tempAvatar = this.normalizeUploadedAvatarUrl(rawUrl)
 			} catch (err) {
-				console.error('上传头像失败:', err)
 				uni.showToast({ title: '头像上传失败', icon: 'none' })
 			} finally {
 				uni.hideLoading()
 			}
 		},
 
-		/**
-		 * 昵称失去焦点（同步 nickname 类型 input 的值）
-		 */
 		onNicknameBlur(e) {
 			this.tempNickname = e.detail.value
 		},
 
-		/**
-		 * 提交资料
-		 */
 		async submitProfile() {
-			// 艹，如果没改资料想跳过，也可以直接关掉，但老王建议还是填一下
 			if (!this.tempNickname && !this.tempAvatar) {
 				this.showProfileModal = false
 				this.jumpToMine()
@@ -209,7 +197,6 @@ export default {
 					nickname: this.tempNickname || this.userInfo.nickname,
 					avatar: this.tempAvatar || this.userInfo.avatar
 				}
-				// 艹，这里有个坑：userInfo 是 reactive 或者是传过来的，得确保保存的是纯对象
 				saveLoginInfo(JSON.parse(JSON.stringify(newUserInfo)))
 
 				uni.showToast({ title: '资料已完善', icon: 'success' })
@@ -228,9 +215,50 @@ export default {
 			}, 1000)
 		},
 
-		// 艹，跳转到协议页面
 		goAgreement(type) {
 			uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
+		},
+
+		getPendingInviterId() {
+			return Number(this.inviterId || uni.getStorageSync('pending_inviter_id') || 0)
+		},
+
+		needCompleteProfile(userInfo = {}) {
+			return !userInfo.nickname || /1[3-9]\d\*\*\*\*\d{4}/.test(userInfo.nickname)
+		},
+
+		async requestWechatLogin(code, inviterId) {
+			let userInfo = await wechatLogin(code, '', '', inviterId)
+			if (!userInfo || !userInfo.token) {
+				const info = await get('/api/user/info')
+				userInfo = info.userInfo || userInfo
+			}
+			if (!userInfo || !userInfo.token) {
+				throw new Error('登录态未建立，请重试')
+			}
+			return userInfo
+		},
+
+		normalizeUploadedAvatarUrl(url) {
+			let fullUrl = String(url || '')
+			if (fullUrl.startsWith('//')) {
+				fullUrl = 'http:' + fullUrl
+			}
+
+			fullUrl = fullUrl.replace(/^https:\/\/(localhost|127\.0\.0\.1)/i, 'http://$1')
+
+			const baseURL = API_CONFIG.baseURL
+			if (baseURL && !baseURL.includes('localhost') && !baseURL.includes('127.0.0.1')) {
+				const baseMatch = baseURL.match(/^(https?:\/\/[^\/]+)/i)
+				if (baseMatch) {
+					fullUrl = fullUrl.replace(/^http?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, baseMatch[1])
+				}
+			}
+
+			if (fullUrl.startsWith('//')) {
+				fullUrl = 'http:' + fullUrl
+			}
+			return fullUrl
 		}
 	}
 }
@@ -338,7 +366,7 @@ export default {
 	text-decoration: underline;
 }
 
-/* 艹，完善资料弹窗样式 */
+/* 完善资料弹窗样式 */
 .profile-modal {
 	position: fixed;
 	top: 0;

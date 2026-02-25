@@ -6,19 +6,23 @@ use Throwable;
 use ba\Captcha;
 use ba\ClickCaptcha;
 use think\facade\Config;
+use think\facade\Log;
+use app\common\library\InviteService;
 use app\common\facade\Token;
 use app\common\controller\Frontend;
 use app\api\validate\User as UserValidate;
 
 class User extends Frontend
 {
+    private const INVITE_DEBUG_TAG = '[INVITE_DEBUG]';
+
     protected array $noNeedLogin = ['checkIn', 'logout', 'mobileLogin', 'wechatLogin'];
 
     public function initialize(): void
     {
         parent::initialize();
 
-        // 艹，终极修复：在初始化里直接加载限流，针对特定方法
+        // 登录相关接口限流
         if (in_array($this->request->action(), ['checkIn', 'mobileLogin', 'wechatLogin'])) {
             $this->app->middleware->add([\think\middleware\Throttle::class, [
                 'visit_rate' => '5/m',
@@ -80,7 +84,7 @@ class User extends Frontend
 
             if (isset($res) && $res === true) {
                 $userInfo = $this->auth->getUserInfo();
-                $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
+                $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar'] ?? '');
                 $this->success(__('Login succeeded!'), [
                     'userInfo'  => $userInfo,
                     'routePath' => '/user'
@@ -128,7 +132,7 @@ class User extends Frontend
         }
 
         if ($this->request->isPost()) {
-            $params = $this->request->post(['mobile', 'captcha']);
+            $params = $this->request->post(['mobile', 'captcha', 'inviter_id']);
 
             // 参数验证
             $validate = new UserValidate();
@@ -144,10 +148,19 @@ class User extends Frontend
                 $this->error(__('验证码错误或已过期'));
             }
 
-            // 查询手机号是否已注册
-            $userInfo = \app\common\model\User::where('mobile', $params['mobile'])->find();
+            $inviterId = intval($params['inviter_id'] ?? 0);
+            $this->logInviteDebug('mobileLogin', 'start', [
+                'inviter_id' => $inviterId,
+                'mobile_tail' => substr((string)$params['mobile'], -4),
+                'ip' => $this->request->ip(),
+            ]);
 
-            if (!$userInfo) {
+            // 查询手机号是否已注册
+            $userModel = \app\common\model\User::where('mobile', $params['mobile'])->find();
+            $inviteEligibleRetry = false;
+
+            $isNewUser = false;
+            if (!$userModel) {
                 // 手机号未注册，自动注册新用户
                 // username: 生成符合规则的用户名（u + 手机号）
                 // mobile: 手机号
@@ -167,10 +180,15 @@ class User extends Frontend
                     $msg = $msg ?: __('注册失败，请稍后重试');
                     $this->error($msg);
                 }
+                $isNewUser = true;
             } else {
+                if ($inviterId > 0) {
+                    $inviteEligibleRetry = $this->isFreshUserForInviteRetry($userModel);
+                }
+
                 // 手机号已注册，直接登录
                 // 使用 direct() 方法直接登录，无需密码验证
-                $res = $this->auth->direct($userInfo->id);
+                $res = $this->auth->direct($userModel->id);
 
                 if ($res !== true) {
                     $msg = $this->auth->getError();
@@ -180,8 +198,16 @@ class User extends Frontend
             }
 
             // 登录成功，返回用户信息和 Token
-            $userInfo = $this->auth->getUserInfo();
-            $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
+            $userInfo = $this->normalizeAuthUserInfo();
+            $userId = intval($userInfo['id'] ?? 0);
+            $this->logInviteDebug('mobileLogin', 'after-auth', [
+                'user_id' => intval($userInfo['id'] ?? 0),
+                'is_new_user' => $isNewUser ? 1 : 0,
+                'retry_eligible' => $inviteEligibleRetry ? 1 : 0,
+                'inviter_id' => $inviterId,
+            ]);
+            $this->bindInviteAfterLogin('mobileLogin', $isNewUser, $inviteEligibleRetry, $inviterId, $userId, 'mobile_login_share');
+
             $this->success(__('登录成功'), [
                 'userInfo'  => $userInfo,
                 'routePath' => '/user'
@@ -211,7 +237,7 @@ class User extends Frontend
         }
 
         if ($this->request->isPost()) {
-            $params = $this->request->post(['code', 'nickname', 'avatar']);
+            $params = $this->request->post(['code', 'nickname', 'avatar', 'inviter_id']);
 
             // 参数验证
             if (empty($params['code'])) {
@@ -222,23 +248,30 @@ class User extends Frontend
                 // 使用微信工具类
                 $wechat = new \app\common\library\WechatMiniApp();
 
-                // 艹，改用新版手机号验证，彻底解决解密失败问题
                 $mobile = $wechat->getPhoneNumberNew($params['code']);
 
-                // 查询手机号是否已注册
-                $userInfo = \app\common\model\User::where('mobile', $mobile)->find();
+                $inviterId = intval($params['inviter_id'] ?? 0);
+                $this->logInviteDebug('wechatLogin', 'start', [
+                    'inviter_id' => $inviterId,
+                    'mobile_tail' => substr((string)$mobile, -4),
+                    'ip' => $this->request->ip(),
+                ]);
 
-                if (!$userInfo) {
+                // 查询手机号是否已注册
+                $userModel = \app\common\model\User::where('mobile', $mobile)->find();
+                $inviteEligibleRetry = false;
+
+                $isNewUser = false;
+                if (!$userModel) {
                     // 手机号未注册，自动注册新用户
                     $username = 'u' . $mobile;
 
-                    // 艹，同步资料
                     $extend = [];
-                    if (!empty($params['nickname'])) {
-                        $extend['nickname'] = $params['nickname'];
+                    if (!empty($params['nickname'] ?? '')) {
+                        $extend['nickname'] = $params['nickname'] ?? '';
                     }
-                    if (!empty($params['avatar'])) {
-                        $extend['avatar'] = $params['avatar'];
+                    if (!empty($params['avatar'] ?? '')) {
+                        $extend['avatar'] = $params['avatar'] ?? '';
                     }
 
                     $res = $this->auth->register(
@@ -255,22 +288,27 @@ class User extends Frontend
                         $msg = $msg ?: __('注册失败，请稍后重试');
                         $this->error($msg);
                     }
+                    $isNewUser = true;
                 } else {
+                    if ($inviterId > 0) {
+                        $inviteEligibleRetry = $this->isFreshUserForInviteRetry($userModel);
+                    }
+
                     // 老用户静默更新资料（如果是默认昵称的话）
                     $isUpdated = false;
-                    if ((empty($userInfo->nickname) || preg_match('/1[3-9]\d\*\*\*\*\d{4}/', $userInfo->nickname)) && !empty($params['nickname'])) {
-                        $userInfo->nickname = $params['nickname'];
+                    if ((empty($userModel->nickname) || preg_match('/1[3-9]\d\*\*\*\*\d{4}/', $userModel->nickname)) && !empty($params['nickname'] ?? '')) {
+                        $userModel->nickname = $params['nickname'] ?? '';
                         $isUpdated = true;
                     }
-                    if (empty($userInfo->avatar) && !empty($params['avatar'])) {
-                        $userInfo->avatar = $params['avatar'];
+                    if (empty($userModel->avatar) && !empty($params['avatar'] ?? '')) {
+                        $userModel->avatar = $params['avatar'] ?? '';
                         $isUpdated = true;
                     }
                     if ($isUpdated) {
-                        $userInfo->save();
+                        $userModel->save();
                     }
 
-                    $res = $this->auth->direct($userInfo->id);
+                    $res = $this->auth->direct($userModel->id);
 
                     if ($res !== true) {
                         $msg = $this->auth->getError();
@@ -280,8 +318,16 @@ class User extends Frontend
                 }
 
                 // 登录成功，返回用户信息和 Token
-                $userInfo = $this->auth->getUserInfo();
-                $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
+                $userInfo = $this->normalizeAuthUserInfo();
+                $userId = intval($userInfo['id'] ?? 0);
+                $this->logInviteDebug('wechatLogin', 'after-auth', [
+                    'user_id' => intval($userInfo['id'] ?? 0),
+                    'is_new_user' => $isNewUser ? 1 : 0,
+                    'retry_eligible' => $inviteEligibleRetry ? 1 : 0,
+                    'inviter_id' => $inviterId,
+                ]);
+                $this->bindInviteAfterLogin('wechatLogin', $isNewUser, $inviteEligibleRetry, $inviterId, $userId, 'wechat_login_share');
+
                 $this->success(__('登录成功'), [
                     'userInfo'  => $userInfo,
                     'routePath' => '/user'
@@ -329,7 +375,7 @@ class User extends Frontend
         $myCollectionsCount = \app\common\model\DiscoveryCollection::where('user_id', $userId)->count();
 
         $userInfo = $this->auth->getUserInfo();
-        $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar']);
+        $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar'] ?? '');
 
         $this->success('', [
             'userInfo' => $userInfo,
@@ -367,9 +413,14 @@ class User extends Frontend
         foreach ($list as &$item) {
             if (isset($item['note'])) {
                 $item['note']['image_url'] = $this->convertImageUrl($item['note']['image_url']);
-                if (isset($item['note']['user']['avatar'])) {
-                    $item['note']['user']['avatar'] = $this->convertImageUrl($item['note']['user']['avatar']);
+                if (empty($item['note']['user']) || !is_array($item['note']['user'])) {
+                    $item['note']['user'] = [
+                        'id' => 0,
+                        'nickname' => '用户已注销',
+                        'avatar' => '',
+                    ];
                 }
+                $item['note']['user']['avatar'] = $this->convertImageUrl($item['note']['user']['avatar'] ?? '');
             }
         }
 
@@ -399,9 +450,14 @@ class User extends Frontend
         foreach ($list as &$item) {
             if (isset($item['note'])) {
                 $item['note']['image_url'] = $this->convertImageUrl($item['note']['image_url']);
-                if (isset($item['note']['user']['avatar'])) {
-                    $item['note']['user']['avatar'] = $this->convertImageUrl($item['note']['user']['avatar']);
+                if (empty($item['note']['user']) || !is_array($item['note']['user'])) {
+                    $item['note']['user'] = [
+                        'id' => 0,
+                        'nickname' => '用户已注销',
+                        'avatar' => '',
+                    ];
                 }
+                $item['note']['user']['avatar'] = $this->convertImageUrl($item['note']['user']['avatar'] ?? '');
             }
         }
 
@@ -419,7 +475,7 @@ class User extends Frontend
         $userId = $this->auth->id;
 
         $list = \app\common\model\UserFollow::with(['user' => function($query) {
-            $query->field('id,nickname,avatar'); // 艹，安全优化：严禁泄露他人手机号
+            $query->field('id,nickname,avatar');
         }])->where('follow_user_id', $userId)
            ->order('create_time', 'desc')
            ->page($page, $limit)
@@ -427,9 +483,14 @@ class User extends Frontend
            ->toArray();
 
         foreach ($list as &$item) {
-            if (isset($item['user']['avatar'])) {
-                $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar']);
+            if (empty($item['user']) || !is_array($item['user'])) {
+                $item['user'] = [
+                    'id' => 0,
+                    'nickname' => '用户已注销',
+                    'avatar' => '',
+                ];
             }
+            $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar'] ?? '');
         }
 
         $this->success('', ['list' => $list]);
@@ -446,7 +507,7 @@ class User extends Frontend
         $userId = $this->auth->id;
 
         $list = \app\common\model\UserFollow::with(['followUser' => function($query) {
-            $query->field('id,nickname,avatar'); // 艹，安全优化：严禁泄露他人手机号
+            $query->field('id,nickname,avatar');
         }])->where('user_id', $userId)
            ->order('create_time', 'desc')
            ->page($page, $limit)
@@ -454,9 +515,14 @@ class User extends Frontend
            ->toArray();
 
         foreach ($list as &$item) {
-            if (isset($item['followUser']['avatar'])) {
-                $item['followUser']['avatar'] = $this->convertImageUrl($item['followUser']['avatar']);
+            if (empty($item['followUser']) || !is_array($item['followUser'])) {
+                $item['followUser'] = [
+                    'id' => 0,
+                    'nickname' => '用户已注销',
+                    'avatar' => '',
+                ];
             }
+            $item['followUser']['avatar'] = $this->convertImageUrl($item['followUser']['avatar'] ?? '');
         }
 
         $this->success('', ['list' => $list]);
@@ -469,7 +535,7 @@ class User extends Frontend
     {
         if (empty($url)) return '';
         if (str_starts_with($url, 'http')) return $url;
-        // 艹，如果已经带了域名但没协议（比如 www.bbhttp.com/storage...）
+        // 若已经是当前域名路径但缺少协议，则补全协议
         $domain = $this->request->host();
         if (str_starts_with(ltrim($url, '/'), $domain)) {
             return 'https://' . ltrim($url, '/');
@@ -480,5 +546,59 @@ class User extends Frontend
             $domainWithProtocol = 'https://' . ltrim($domainWithProtocol, '/');
         }
         return rtrim($domainWithProtocol, '/') . '/' . ltrim($url, '/');
+    }
+
+    /**
+     * 兜底：首次登录请求中断后，短时间内再次登录仍允许补记邀请
+     */
+    private function isFreshUserForInviteRetry(\app\common\model\User $user): bool
+    {
+        $joinTime = intval($user->join_time ?? 0);
+        $lastLoginTime = intval($user->last_login_time ?? 0);
+        if ($joinTime <= 0 || $lastLoginTime <= 0) {
+            return false;
+        }
+        if ($joinTime !== $lastLoginTime) {
+            return false;
+        }
+        return (time() - $joinTime) <= 1800;
+    }
+
+    private function normalizeAuthUserInfo(): array
+    {
+        $userInfo = $this->auth->getUserInfo();
+        $userInfo['avatar'] = $this->convertImageUrl($userInfo['avatar'] ?? '');
+        return $userInfo;
+    }
+
+    private function bindInviteAfterLogin(
+        string $action,
+        bool $isNewUser,
+        bool $inviteEligibleRetry,
+        int $inviterId,
+        int $userId,
+        string $scene
+    ): void {
+        if (($isNewUser || $inviteEligibleRetry) && $inviterId > 0 && $userId > 0) {
+            $bindRes = InviteService::bindNewUserInvite($inviterId, $userId, $scene);
+            $this->logInviteDebug($action, 'bind-result', [
+                'user_id' => $userId,
+                'inviter_id' => $inviterId,
+                'bind_result' => $bindRes ? 1 : 0,
+            ]);
+            return;
+        }
+
+        $this->logInviteDebug($action, 'skip-bind', [
+            'user_id' => $userId,
+            'inviter_id' => $inviterId,
+            'is_new_user' => $isNewUser ? 1 : 0,
+            'retry_eligible' => $inviteEligibleRetry ? 1 : 0,
+        ]);
+    }
+
+    private function logInviteDebug(string $action, string $stage, array $context = []): void
+    {
+        Log::info(self::INVITE_DEBUG_TAG . '[' . $action . '] ' . $stage, $context);
     }
 }

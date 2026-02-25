@@ -57,7 +57,11 @@
 		},
 		methods: {
 			targetUser(item) {
-				return this.type === 'fans' ? item.user : item.followUser
+				const target = this.type === 'fans' ? item.user : item.followUser
+				if (target && typeof target === 'object') {
+					return target
+				}
+				return { id: 0, nickname: '用户已注销', mobile: '', avatar: '' }
 			},
 			maskMobile(mobile) {
 				if (!mobile) return ''
@@ -92,6 +96,10 @@
 				}
 			},
 			async toggleFollow(userId) {
+				if (!userId) {
+					uni.showToast({ title: '该用户已注销', icon: 'none' })
+					return
+				}
 				try {
 					await post('/api/discovery/toggleFollow', { user_id: userId })
 					uni.showToast({ title: '操作成功', icon: 'none' })
