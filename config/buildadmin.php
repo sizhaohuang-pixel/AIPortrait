@@ -86,8 +86,21 @@ return [
     // 微信小程序配置
     'wechat_miniapp'        => [
         // 小程序 AppID（请在微信公众平台获取）
-        'app_id'     => 'wxdfbb82f339aaa03d',
+        'app_id'     => env('wechat_miniapp.appid', env('WECHAT_MINIAPP_APPID', 'wxdfbb82f339aaa03d')),
         // 小程序 AppSecret（请在微信公众平台获取）
-        'app_secret' => '5a7723184933fa93d281d924351368ce',
+        'app_secret' => env('wechat_miniapp.secret', env('WECHAT_MINIAPP_SECRET', '5a7723184933fa93d281d924351368ce')),
+    ],
+    // 微信支付配置（小程序 JSAPI）
+    'wechat_pay'            => [
+        // 微信支付商户号
+        'mch_id'            => env('wechat_pay.mch_id', env('WECHAT_PAY_MCH_ID', '')),
+        // 微信支付 APIv2 密钥
+        'api_key'           => env('wechat_pay.api_key', env('WECHAT_PAY_API_KEY', '')),
+        // 微信支付通知地址（留空将自动使用当前域名 + /api/score/notify）
+        'notify_url'        => env('wechat_pay.notify_url', env('WECHAT_PAY_NOTIFY_URL', '')),
+        // 订单标题
+        'body'              => env('wechat_pay.body', '积分充值'),
+        // 支付超时时间（分钟）
+        'timeout_minute'    => env('wechat_pay.timeout_minute', 10),
     ],
 ];

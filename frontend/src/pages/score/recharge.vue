@@ -26,7 +26,8 @@
 		<view class="recharge-footer">
 			<button
 				class="recharge-btn"
-				:disabled="!selectedPackage"
+				:disabled="!selectedPackage || isPaying"
+				:loading="isPaying"
 				@tap="handleRecharge"
 			>
 				{{ selectedPackage ? `立即充值 ¥${selectedPackage.amount}` : '请选择充值档位' }}
@@ -42,7 +43,8 @@
 		data() {
 			return {
 				packages: [],
-				selectedPackage: null
+				selectedPackage: null,
+				isPaying: false
 			}
 		},
 		onLoad() {
@@ -66,7 +68,11 @@
 			},
 
 			// 艹，处理充值
-			handleRecharge() {
+			async handleRecharge() {
+				if (this.isPaying) {
+					return
+				}
+
 				if (!this.selectedPackage) {
 					uni.showToast({
 						title: '请选择充值档位',
@@ -76,11 +82,13 @@
 				}
 
 				// 艹，创建充值订单
-				this.createOrder()
+				await this.createOrder()
 			},
 
 			// 艹，创建充值订单
 			async createOrder() {
+				if (this.isPaying) return
+				this.isPaying = true
 				uni.showLoading({ title: '创建订单中...' })
 
 				try {
@@ -89,39 +97,102 @@
 					})
 					uni.hideLoading()
 
-					// 艹，订单创建成功，调用模拟支付
-					this.mockPay(data.order_no)
+					// 艹，订单创建成功，拉起微信支付
+					await this.wechatPay(data.order_no)
 				} catch (error) {
 					uni.hideLoading()
 					console.error('创建订单失败:', error)
+				} finally {
+					this.isPaying = false
 				}
 			},
 
-			// 艹，模拟支付
-			async mockPay(orderNo) {
-				uni.showLoading({ title: '支付中...' })
+			// 艹，微信小程序支付
+			async wechatPay(orderNo) {
+				// #ifndef MP-WEIXIN
+				uni.hideLoading()
+				uni.showToast({
+					title: '请在微信小程序内完成支付',
+					icon: 'none'
+				})
+				return
+				// #endif
+
+				uni.showLoading({ title: '拉起支付中...' })
 
 				try {
-					await post('/api/score/mockPay', {
-						order_no: orderNo
+					const loginRes = await this.wxLogin()
+					const payData = await post('/api/score/pay', {
+						order_no: orderNo,
+						code: loginRes.code
 					})
+
+					await this.requestWxPayment(payData)
+					await this.pollOrderPaid(orderNo)
+
 					uni.hideLoading()
-
-					// 艹，支付成功
-					uni.showToast({
-						title: '充值成功',
-						icon: 'success',
-						duration: 2000
-					})
-
-					// 艹，延迟返回上一页
-					setTimeout(() => {
-						uni.navigateBack()
-					}, 2000)
+					uni.showToast({ title: '充值成功', icon: 'success', duration: 1500 })
+					setTimeout(() => uni.navigateBack(), 1500)
 				} catch (error) {
 					uni.hideLoading()
-					console.error('支付失败:', error)
+
+					const errMsg = error?.errMsg || error?.msg || ''
+					if (errMsg.includes('cancel')) {
+						uni.showToast({ title: '已取消支付', icon: 'none' })
+					} else {
+						console.error('支付失败:', error)
+						uni.showToast({
+							title: error?.msg || '支付失败，请稍后在充值记录中查看',
+							icon: 'none'
+						})
+					}
 				}
+			},
+
+			wxLogin() {
+				return new Promise((resolve, reject) => {
+					uni.login({
+						provider: 'weixin',
+						success: (res) => {
+							if (res.code) {
+								resolve(res)
+							} else {
+								reject(new Error('微信登录失败'))
+							}
+						},
+						fail: reject
+					})
+				})
+			},
+
+			requestWxPayment(payData) {
+				return new Promise((resolve, reject) => {
+					uni.requestPayment({
+						provider: 'wxpay',
+						timeStamp: String(payData.timeStamp),
+						nonceStr: payData.nonceStr,
+						package: payData.package,
+						signType: payData.signType || 'MD5',
+						paySign: payData.paySign,
+						success: resolve,
+						fail: reject
+					})
+				})
+			},
+
+			async pollOrderPaid(orderNo) {
+				const maxRetry = 10
+				const intervalMs = 1000
+
+				for (let i = 0; i < maxRetry; i++) {
+					const order = await post('/api/score/checkOrder', { order_no: orderNo })
+					if (Number(order.pay_status) === 1) {
+						return true
+					}
+					await new Promise((resolve) => setTimeout(resolve, intervalMs))
+				}
+
+				throw new Error('支付结果确认超时，请稍后在充值记录中查看')
 			}
 		}
 	}

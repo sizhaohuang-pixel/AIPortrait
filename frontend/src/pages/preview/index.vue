@@ -385,8 +385,10 @@
 			goPublish() {
 				const currentItem = this.results[this.activeIndex]
 				if (!currentItem || !currentItem.result_url) return
+				const templateId = this.task ? parseInt(this.task.template_id || 0) : 0
+				const subTemplateId = this.task ? parseInt(this.task.sub_template_id || 0) : 0
 				uni.navigateTo({
-					url: `/pages/discovery/post?url=${encodeURIComponent(currentItem.result_url)}`
+					url: `/pages/discovery/post?url=${encodeURIComponent(currentItem.result_url)}&templateId=${templateId}&subTemplateId=${subTemplateId}`
 				})
 			},
 

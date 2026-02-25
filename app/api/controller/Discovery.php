@@ -79,9 +79,14 @@ class Discovery extends Frontend
         // 转换图片路径
         foreach ($list as &$item) {
             $item['image_url'] = $this->convertImageUrl($item['image_url']);
-            if (isset($item['user']['avatar'])) {
-                $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar']);
+            if (empty($item['user']) || !is_array($item['user'])) {
+                $item['user'] = [
+                    'id' => 0,
+                    'nickname' => '用户已注销',
+                    'avatar' => '',
+                ];
             }
+            $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar'] ?? '');
             // 艹，注入交互状态
             $item['is_like'] = in_array($item['id'], $myLikes);
             $item['is_collection'] = in_array($item['id'], $myCollections);
@@ -111,6 +116,8 @@ class Discovery extends Frontend
     {
         $imageUrl = $this->request->post('image_url');
         $content = $this->request->post('content', '');
+        $templateId = $this->request->post('template_id/d', 0);
+        $subTemplateId = $this->request->post('sub_template_id/d', 0);
 
         if (empty($imageUrl)) {
             $this->error('请选择图片');
@@ -126,6 +133,8 @@ class Discovery extends Frontend
             'user_id' => $this->auth->id,
             'image_url' => $imageUrl,
             'content' => $content,
+            'template_id' => $templateId,
+            'sub_template_id' => $subTemplateId,
             'status' => 1, // 直接发布
             'create_time' => time(),
             'update_time' => time(),
@@ -167,9 +176,14 @@ class Discovery extends Frontend
 
         $note = $note->toArray();
         $note['image_url'] = $this->convertImageUrl($note['image_url']);
-        if (isset($note['user']['avatar'])) {
-            $note['user']['avatar'] = $this->convertImageUrl($note['user']['avatar']);
+        if (empty($note['user']) || !is_array($note['user'])) {
+            $note['user'] = [
+                'id' => 0,
+                'nickname' => '用户已注销',
+                'avatar' => '',
+            ];
         }
+        $note['user']['avatar'] = $this->convertImageUrl($note['user']['avatar'] ?? '');
 
         // 交互状态
         $isLike = false;
@@ -338,9 +352,14 @@ class Discovery extends Frontend
            ->toArray();
 
         foreach ($list as &$item) {
-            if (isset($item['user']['avatar'])) {
-                $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar']);
+            if (empty($item['user']) || !is_array($item['user'])) {
+                $item['user'] = [
+                    'id' => 0,
+                    'nickname' => '用户已注销',
+                    'avatar' => '',
+                ];
             }
+            $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar'] ?? '');
         }
 
         return $this->success('获取成功', ['list' => $list]);

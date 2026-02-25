@@ -92,6 +92,12 @@
 			}
 		},
 		{
+			"path": "pages/invite/index",
+			"style": {
+				"navigationBarTitleText": "邀请好友"
+			}
+		},
+		{
 			"path": "pages/agreement/index",
 			"style": {
 				"navigationBarTitleText": ""

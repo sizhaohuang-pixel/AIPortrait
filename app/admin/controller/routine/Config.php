@@ -5,6 +5,8 @@ namespace app\admin\controller\routine;
 use Throwable;
 use ba\Filesystem;
 use app\common\library\Email;
+use think\facade\Db;
+use think\facade\Cache;
 use PHPMailer\PHPMailer\PHPMailer;
 use app\common\controller\Backend;
 use app\admin\model\Config as ConfigModel;
@@ -32,6 +34,8 @@ class Config extends Backend
 
     public function index(): void
     {
+        $this->ensureElectricIncreaseNumberConfig();
+
         $configGroup = get_sys_config('config_group');
         $config      = $this->model->order('weigh desc')->select()->toArray();
 
@@ -55,6 +59,31 @@ class Config extends Backend
             'configGroup'   => $newConfigGroup ?? [],
             'quickEntrance' => get_sys_config('config_quick_entrance'),
         ]);
+    }
+
+    /**
+     * 确保基础配置中存在电增号
+     */
+    protected function ensureElectricIncreaseNumberConfig(): void
+    {
+        $exists = Db::name('config')->where('name', 'electric_increase_number')->find();
+        if ($exists) {
+            return;
+        }
+
+        $recordConfig = Db::name('config')->where('name', 'record_number')->find();
+        $weigh = $recordConfig ? intval($recordConfig['weigh']) - 1 : 0;
+
+        Db::name('config')->insert([
+            'name'  => 'electric_increase_number',
+            'title' => '电增号',
+            'group' => 'basics',
+            'type'  => 'string',
+            'value' => '',
+            'weigh' => $weigh,
+        ]);
+
+        Cache::tag(ConfigModel::$cacheTag)->clear();
     }
 
     /**

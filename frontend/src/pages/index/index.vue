@@ -117,7 +117,8 @@
 				}
 			}
 		},
-		onLoad() {
+		onLoad(query) {
+			this.captureInviterId(query)
 			this.loadData()
 			// 艹，加载分享配置
 			this.loadShareConfig()
@@ -186,6 +187,22 @@
 			}
 		},
 		methods: {
+			captureInviterId(query = {}) {
+				let inviterId = Number(query.inviter_id || 0)
+				const scene = query.scene ? decodeURIComponent(query.scene) : ''
+				if (!inviterId && scene) {
+					const pairs = String(scene).split('&')
+					pairs.forEach(pair => {
+						const [k, v] = pair.split('=')
+						if (k === 'inviter_id') {
+							inviterId = Number(v || 0)
+						}
+					})
+				}
+				if (inviterId > 0) {
+					uni.setStorageSync('pending_inviter_id', inviterId)
+				}
+			},
 			formattedUrl(url) {
 				if (!url) return ''
 				if (url.startsWith('http')) return url

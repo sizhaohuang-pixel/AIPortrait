@@ -26,7 +26,8 @@ class TaskProcessor
     /**
      * 艹，配置常量
      */
-    const TASK_TIMEOUT = 600;           // 任务超时时间（10分钟）
+    const TASK_TIMEOUT = 600;           // 任务超时时间（10分钟）- 梦幻模式
+    const MODE2_TASK_TIMEOUT = 1200;    // 专业模式超时时间（20分钟）- 需要执行两步
     const MAX_RETRY_TIMES = 3;          // 最大重试次数
     const RETRY_DELAY = 2;              // 重试延迟（秒）
     const IMAGES_PER_TASK = 4;          // 每个任务生成的图片数量
@@ -119,7 +120,7 @@ class TaskProcessor
 
             // 艹，判断生成模式
             $mode = $task->mode;
-            
+
             if ($mode == 2) {
                 // 艹，专业模式：先用 seedream 生成图片，再用 rhart-image-n-pro 生成
                 // 艹，修改为异步流程：只提交第一步，不等待结果
@@ -130,7 +131,7 @@ class TaskProcessor
                 // 艹，第一步：只提交 seedream-v4.5 任务，不等待结果
                 // 专业模式第一步必须走 seedream（mode=1）
                 $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 1, 1);
-                
+
                 // 艹，检查第一步是否提交成功
                 if ($submittedCount == 0) {
                     Log::error("TaskProcessor 第一步提交完全失败");
@@ -465,7 +466,7 @@ class TaskProcessor
                 ->where('sub_task_index', '>=', 5)
                 ->where('sub_task_index', '<=', 8)
                 ->count();
-            
+
             if ($step2Exists > 0) {
                 Log::info("TaskProcessor 第二步已提交，跳过", [
                     'task_id' => $task->id,
@@ -527,7 +528,6 @@ class TaskProcessor
                 'step1_success_count' => $successCount,
                 'step1_failed_count' => $step1FailedCount,
             ]);
-
         } catch (\Exception $e) {
             Log::error("TaskProcessor 触发第二步异常", [
                 'task_id' => $task->id,
@@ -628,6 +628,8 @@ class TaskProcessor
         $pendingCount = AiTaskResult::where('task_id', $taskId)
             ->where('status', 0)
             ->count();
+
+        $totalCount = AiTaskResult::where('task_id', $taskId)->count();
 
         $task = AiTask::find($taskId);
         if (!$task) {
@@ -755,34 +757,56 @@ class TaskProcessor
     /**
      * 处理超时任务
      * 艹，这个方法处理那些卡在进度里的"僵尸任务"
-     * 超时时间：10分钟（600秒）
+     * 超时时间：梦幻模式10分钟（600秒），专业模式20分钟（1200秒）
      *
      * @return void
      */
     public function handleTimeoutTasks()
     {
         try {
-            // 艹，查询所有超时的任务（status=0/9且创建时间超过10分钟）
-            $timeoutThreshold = time() - self::TASK_TIMEOUT;
-            $timeoutTasks = AiTask::whereIn('status', [0, 9])
-                ->where('create_time', '<', $timeoutThreshold)
+            // 艹，分别查询梦幻模式和专业模式的超时任务
+            // 梦幻模式（mode=1）：10分钟超时
+            $mode1TimeoutThreshold = time() - self::TASK_TIMEOUT;
+            // 专业模式（mode=2）：20分钟超时（需要执行两步）
+            $mode2TimeoutThreshold = time() - self::MODE2_TASK_TIMEOUT;
+
+            // 艹，查询梦幻模式的超时任务
+            $mode1TimeoutTasks = AiTask::whereIn('status', [0, 9])
+                ->where('mode', 1)
+                ->where('create_time', '<', $mode1TimeoutThreshold)
                 ->select();
 
-            if ($timeoutTasks->isEmpty()) {
+            // 艹，查询专业模式的超时任务
+            $mode2TimeoutTasks = AiTask::whereIn('status', [0, 9])
+                ->where('mode', 2)
+                ->where('create_time', '<', $mode2TimeoutThreshold)
+                ->select();
+
+            // 艹，合并两个结果集
+            $timeoutTasks = array_merge($mode1TimeoutTasks->toArray(), $mode2TimeoutTasks->toArray());
+
+            if (empty($timeoutTasks)) {
                 return;
             }
 
             Log::info("TaskProcessor 发现超时任务", [
-                'count' => $timeoutTasks->count(),
-                'timeout_threshold' => self::TASK_TIMEOUT,
+                'count' => count($timeoutTasks),
+                'mode1_count' => $mode1TimeoutTasks->count(),
+                'mode2_count' => $mode2TimeoutTasks->count(),
+                'mode1_timeout' => self::TASK_TIMEOUT,
+                'mode2_timeout' => self::MODE2_TASK_TIMEOUT,
             ]);
 
-            foreach ($timeoutTasks as $task) {
+            foreach ($timeoutTasks as $taskData) {
                 try {
-                    $this->handleSingleTimeoutTask($task);
+                    // 艹，重新查询任务对象以获取完整模型
+                    $task = AiTask::find($taskData['id']);
+                    if ($task) {
+                        $this->handleSingleTimeoutTask($task);
+                    }
                 } catch (\Exception $e) {
                     Log::error("TaskProcessor 处理单个超时任务异常", [
-                        'task_id' => $task->id,
+                        'task_id' => $taskData['id'],
                         'error' => $e->getMessage(),
                         'trace' => $e->getTraceAsString(),
                     ]);
@@ -1040,10 +1064,10 @@ class TaskProcessor
     {
         $mode = $mode ?? $task->mode;
         $taskCount = $taskCount ?? self::IMAGES_PER_TASK;
-        
+
         // 艹，计算 sub_task_index：第一步 1-4，第二步 5-8
         $baseIndex = ($step - 1) * 4;
-        
+
         Log::info("TaskProcessor 开始批量异步提交子任务", [
             'task_id' => $task->id,
             'step' => $step,

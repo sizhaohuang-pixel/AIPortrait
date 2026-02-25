@@ -2,8 +2,8 @@
 	<view class="page">
 		<view class="header">
 			<view class="user-info">
-				<image class="avatar" :src="formattedAvatar(note.user.avatar)"></image>
-				<text class="nickname">{{ note.user.nickname }}</text>
+				<image class="avatar" :src="formattedAvatar(note.user && note.user.avatar)"></image>
+				<text class="nickname">{{ (note.user && note.user.nickname) || '用户已注销' }}</text>
 			</view>
 			<button v-if="!isMyNote" :class="['follow-btn', is_follow ? 'is-followed' : '']" @tap="toggleFollow">
 				{{ is_follow ? '已关注' : '关注' }}
@@ -19,15 +19,23 @@
 			<text class="time">{{ createTimeText }}</text>
 		</view>
 
+		<view class="same-style-card">
+			<view class="same-style-main">
+				<view class="same-style-title">喜欢这张风格？</view>
+				<view class="same-style-desc">上传你的照片，快速生成同款写真</view>
+			</view>
+			<button class="same-style-btn" @tap="goMakeSame">做同款</button>
+		</view>
+
 		<view class="divider"></view>
 
 		<view class="comment-section">
 			<view class="section-title">共 {{ note.comments_count }} 条评论</view>
 			<view v-for="item in comments" :key="item.id" class="comment-item">
-				<image class="c-avatar" :src="formattedAvatar(item.user.avatar)"></image>
+				<image class="c-avatar" :src="formattedAvatar(item.user && item.user.avatar)"></image>
 				<view class="c-body">
 					<view class="c-user">
-						<text class="c-nickname">{{ item.user.nickname }}</text>
+						<text class="c-nickname">{{ (item.user && item.user.nickname) || '用户已注销' }}</text>
 						<text v-if="item.user_id === note.user_id" class="author-tag">作者</text>
 					</view>
 					<view class="c-content">{{ item.content }}</view>
@@ -115,6 +123,8 @@
 					user: {},
 					image_url: '',
 					content: '',
+					template_id: 0,
+					sub_template_id: 0,
 					likes_count: 0,
 					collections_count: 0,
 					comments_count: 0,
@@ -306,6 +316,20 @@
 				}
 				return avatar
 			},
+			goMakeSame() {
+				const templateId = parseInt(this.note.template_id || 0)
+				const subTemplateId = parseInt(this.note.sub_template_id || 0)
+				if (!templateId || !subTemplateId) {
+					uni.showToast({
+						title: '该笔记暂不支持做同款',
+						icon: 'none'
+					})
+					return
+				}
+				uni.navigateTo({
+					url: `/pages/upload/index?templateId=${templateId}&subTemplateId=${subTemplateId}`
+				})
+			},
 			formatTime(timestamp) {
 				const date = new Date(timestamp * 1000)
 				const now = new Date()
@@ -408,6 +432,53 @@
 		height: 1rpx;
 		background: #f0f0f0;
 		margin: 0 30rpx;
+	}
+
+	.same-style-card {
+		margin: 0 30rpx 24rpx;
+		padding: 22rpx 24rpx;
+		background: #fff7f2;
+		border: 1rpx solid #f2dfd3;
+		border-radius: 18rpx;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 18rpx;
+	}
+
+	.same-style-main {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.same-style-title {
+		font-size: 28rpx;
+		font-weight: 600;
+		color: #2b2521;
+	}
+
+	.same-style-desc {
+		margin-top: 8rpx;
+		font-size: 23rpx;
+		color: #7f746d;
+		line-height: 1.4;
+	}
+
+	.same-style-btn {
+		flex-shrink: 0;
+		height: 64rpx;
+		line-height: 64rpx;
+		padding: 0 24rpx;
+		border-radius: 999rpx;
+		background: #2b2521;
+		color: #fff;
+		font-size: 24rpx;
+		font-weight: 600;
+		margin: 0;
+	}
+
+	.same-style-btn::after {
+		border: none;
 	}
 
 	.comment-section {

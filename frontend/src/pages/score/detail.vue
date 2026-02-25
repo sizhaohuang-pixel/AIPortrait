@@ -22,7 +22,6 @@
 						<view class="item-score" :class="item.score > 0 ? 'score-add' : 'score-sub'">
 							{{ item.score > 0 ? '+' : '' }}{{ item.score }}
 						</view>
-						<view class="item-balance">余额: {{ item.after }}</view>
 					</view>
 				</view>
 			</view>
@@ -239,7 +238,6 @@
 	.item-score {
 		font-size: 28rpx;
 		font-weight: 700;
-		margin-bottom: 6rpx;
 	}
 
 	.score-add {
@@ -248,11 +246,6 @@
 
 	.score-sub {
 		color: #ff4d4f;
-	}
-
-	.item-balance {
-		font-size: 20rpx;
-		color: #9a8f88;
 	}
 
 	/* 艹，空状态 */

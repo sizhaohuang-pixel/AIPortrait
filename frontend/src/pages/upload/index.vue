@@ -2,32 +2,27 @@
 	<view class="page">
 		<!-- 照片示例 -->
 		<view class="section">
-			<view class="section-title">照片示例</view>
+			<view class="section-title">照片示例（推荐）</view>
 			<view class="example-list">
 				<view class="example-item">
-					<image class="example-img" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400" mode="aspectFill"></image>
+					<image class="example-img" src="/static/images/1.jpg" mode="aspectFill"></image>
 					<view class="example-label">
 						<text class="icon-check">✓</text>
-						<text>清晰正脸</text>
+						<text>正脸</text>
 					</view>
 				</view>
 				<view class="example-item">
-					<view class="example-grid">
-						<image class="example-img-small" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200" mode="aspectFill"></image>
-						<image class="example-img-small" src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200" mode="aspectFill"></image>
-						<image class="example-img-small" src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200" mode="aspectFill"></image>
-						<image class="example-img-small" src="https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=200" mode="aspectFill"></image>
-					</view>
+					<image class="example-img" src="/static/images/2.jpg" mode="aspectFill"></image>
 					<view class="example-label">
 						<text class="icon-check">✓</text>
-						<text>多表情</text>
+						<text>可美颜</text>
 					</view>
 				</view>
 				<view class="example-item">
-					<image class="example-img" src="https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400" mode="aspectFill"></image>
+					<image class="example-img" src="/static/images/3.jpg" mode="aspectFill"></image>
 					<view class="example-label example-label-error">
 						<text class="icon-cross">✕</text>
-						<text>有遮挡</text>
+						<text>遮挡</text>
 					</view>
 				</view>
 			</view>

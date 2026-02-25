@@ -14,6 +14,7 @@ export const useSiteConfig = defineStore('siteConfig', {
             },
             headNav: [],
             recordNumber: '',
+            electricIncreaseNumber: '',
             cdnUrlParams: '',
             initialize: false,
             userInitialize: false,

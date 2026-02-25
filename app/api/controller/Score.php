@@ -8,7 +8,12 @@ use app\common\model\UserScoreLog;
 use app\common\model\ScoreRechargePackage;
 use app\common\model\ScoreRechargeOrder;
 use app\common\model\ScoreConfig;
+use app\common\model\User;
 use think\facade\Db;
+use think\facade\Config;
+use think\facade\Log;
+use think\exception\HttpResponseException;
+use think\Response;
 use Exception;
 
 /**
@@ -18,10 +23,10 @@ use Exception;
 class Score extends Frontend
 {
     // 艹，这些方法都需要登录才能访问
-    protected array $noNeedLogin = ['config'];
+    protected array $noNeedLogin = ['config', 'notify'];
 
     // 艹，这些方法不需要权限验证（已移除 mockPay，安全第一！）
-    protected array $noNeedPermission = ['info', 'log', 'packages', 'createOrder', 'consume', 'config'];
+    protected array $noNeedPermission = ['info', 'log', 'packages', 'createOrder', 'pay', 'checkOrder', 'notify', 'consume', 'config'];
 
     /**
      * 获取积分信息
@@ -196,7 +201,257 @@ class Score extends Frontend
             'amount' => $order->amount,
             'score' => $order->score,
             'bonus_score' => $order->bonus_score,
+            'total_score' => intval($order->score) + intval($order->bonus_score),
         ]);
+    }
+
+    /**
+     * 获取小程序支付参数
+     */
+    public function pay(): void
+    {
+        $userId = $this->auth->id;
+        $orderNo = $this->request->post('order_no', '');
+        $code = $this->request->post('code', '');
+
+        if (!$orderNo) {
+            $this->error('订单号不能为空');
+        }
+        if (!$code) {
+            $this->error('缺少微信登录凭证');
+        }
+
+        $order = ScoreRechargeOrder::where('order_no', $orderNo)->where('user_id', $userId)->find();
+        if (!$order) {
+            $this->error('订单不存在');
+        }
+        if (intval($order->pay_status) === ScoreRechargeOrder::PAY_STATUS_PAID) {
+            $this->error('订单已支付');
+        }
+        if (intval($order->pay_status) === ScoreRechargeOrder::PAY_STATUS_CANCELLED) {
+            $this->error('订单已取消');
+        }
+
+        $payConfig = Config::get('buildadmin.wechat_pay', []);
+        $appId = (string)Config::get('buildadmin.wechat_miniapp.app_id', '');
+        $mchId = (string)($payConfig['mch_id'] ?? '');
+        $apiKey = (string)($payConfig['api_key'] ?? '');
+        // 兼容 env() 的多种键名
+        $appId = $appId ?: (string)env('WECHAT_MINIAPP_APPID', (string)env('wechat_miniapp.appid', ''));
+        $mchId = $mchId ?: (string)env('WECHAT_PAY_MCH_ID', (string)env('wechat_pay.mch_id', ''));
+        $apiKey = $apiKey ?: (string)env('WECHAT_PAY_API_KEY', (string)env('wechat_pay.api_key', ''));
+        // 最终兜底：直接解析 .env 文件（避免某些运行环境下 env() 取值异常）
+        $appId = $appId ?: $this->getEnvFileValue('WECHAT_MINIAPP_APPID');
+        $mchId = $mchId ?: $this->getEnvFileValue('WECHAT_PAY_MCH_ID');
+        $apiKey = $apiKey ?: $this->getEnvFileValue('WECHAT_PAY_API_KEY');
+        if (!$appId || !$mchId || !$apiKey) {
+            $this->error('微信支付配置不完整，请联系管理员配置商户号与密钥');
+        }
+
+        $wechat = new \app\common\library\WechatMiniApp();
+        $session = $wechat->code2Session($code);
+        $openid = $session['openid'] ?? '';
+        if (!$openid) {
+            $this->error('获取用户openid失败');
+        }
+
+        $notifyUrl = $payConfig['notify_url'] ?? '';
+        if (!$notifyUrl) {
+            $notifyUrl = rtrim($this->request->domain(), '/') . '/api/score/notify';
+        }
+        $clientIp = $this->request->ip();
+        if (!$clientIp || str_contains($clientIp, ':')) {
+            $clientIp = '127.0.0.1';
+        }
+
+        $nonceStr = md5(uniqid((string)mt_rand(), true));
+        $totalFee = intval(bcmul((string)$order->amount, '100', 0));
+        $body = $payConfig['body'] ?? '积分充值';
+        $timeoutMinute = max(5, intval($payConfig['timeout_minute'] ?? 10));
+
+        $unifiedOrderParams = [
+            'appid' => $appId,
+            'mch_id' => $mchId,
+            'nonce_str' => $nonceStr,
+            'body' => $body,
+            'out_trade_no' => $order->order_no,
+            'total_fee' => $totalFee,
+            'spbill_create_ip' => $clientIp,
+            'notify_url' => $notifyUrl,
+            'trade_type' => 'JSAPI',
+            'openid' => $openid,
+            'time_expire' => date('YmdHis', time() + $timeoutMinute * 60),
+        ];
+        $unifiedOrderParams['sign'] = $this->buildWechatPaySign($unifiedOrderParams, $apiKey);
+
+        $xml = $this->arrayToXml($unifiedOrderParams);
+        $resultXml = $this->httpPostXml('https://api.mch.weixin.qq.com/pay/unifiedorder', $xml);
+        $result = $this->xmlToArray($resultXml);
+
+        if (($result['return_code'] ?? '') !== 'SUCCESS') {
+            $this->error('统一下单失败：' . ($result['return_msg'] ?? '未知错误'));
+        }
+        if (($result['result_code'] ?? '') !== 'SUCCESS') {
+            $this->error('统一下单失败：' . ($result['err_code_des'] ?? ($result['err_code'] ?? '未知错误')));
+        }
+        if (empty($result['prepay_id'])) {
+            $this->error('统一下单失败：缺少 prepay_id');
+        }
+
+        $payData = [
+            'appId' => $appId,
+            'timeStamp' => (string)time(),
+            'nonceStr' => md5(uniqid((string)mt_rand(), true)),
+            'package' => 'prepay_id=' . $result['prepay_id'],
+            'signType' => 'MD5',
+        ];
+        $payData['paySign'] = $this->buildWechatPaySign($payData, $apiKey);
+
+        $this->success('获取支付参数成功', $payData);
+    }
+
+    /**
+     * 查询订单支付状态
+     */
+    public function checkOrder(): void
+    {
+        $userId = $this->auth->id;
+        $orderNo = $this->request->param('order_no', '');
+        if (!$orderNo) {
+            $this->error('订单号不能为空');
+        }
+
+        $order = ScoreRechargeOrder::where('order_no', $orderNo)->where('user_id', $userId)->find();
+        if (!$order) {
+            $this->error('订单不存在');
+        }
+
+        $this->success('获取成功', [
+            'order_no' => $order->order_no,
+            'pay_status' => intval($order->pay_status),
+            'pay_time' => $order->pay_time ? intval($order->pay_time) : null,
+            'amount' => $order->amount,
+            'score' => intval($order->score),
+            'bonus_score' => intval($order->bonus_score),
+            'total_score' => intval($order->score) + intval($order->bonus_score),
+        ]);
+    }
+
+    /**
+     * 微信支付回调
+     */
+    public function notify(): void
+    {
+        $rawXml = file_get_contents('php://input');
+        if (!$rawXml) {
+            $this->xmlResponse('FAIL', 'empty body');
+        }
+
+        try {
+            $data = $this->xmlToArray($rawXml);
+        } catch (Exception $e) {
+            $this->xmlResponse('FAIL', 'invalid xml');
+            return;
+        }
+
+        $payConfig = Config::get('buildadmin.wechat_pay', []);
+        $appId = (string)Config::get('buildadmin.wechat_miniapp.app_id', '');
+        $mchId = (string)($payConfig['mch_id'] ?? '');
+        $apiKey = (string)($payConfig['api_key'] ?? '');
+        $appId = $appId ?: (string)env('WECHAT_MINIAPP_APPID', (string)env('wechat_miniapp.appid', ''));
+        $mchId = $mchId ?: (string)env('WECHAT_PAY_MCH_ID', (string)env('wechat_pay.mch_id', ''));
+        $apiKey = $apiKey ?: (string)env('WECHAT_PAY_API_KEY', (string)env('wechat_pay.api_key', ''));
+        $appId = $appId ?: $this->getEnvFileValue('WECHAT_MINIAPP_APPID');
+        $mchId = $mchId ?: $this->getEnvFileValue('WECHAT_PAY_MCH_ID');
+        $apiKey = $apiKey ?: $this->getEnvFileValue('WECHAT_PAY_API_KEY');
+        if (!$apiKey || !$appId || !$mchId) {
+            Log::error('微信支付回调失败：api_key 未配置');
+            $this->xmlResponse('FAIL', 'config error');
+        }
+
+        if (!$this->verifyWechatPaySign($data, $apiKey)) {
+            Log::warning('微信支付回调签名校验失败：' . json_encode($data, JSON_UNESCAPED_UNICODE));
+            $this->xmlResponse('FAIL', 'sign error');
+        }
+
+        if (($data['return_code'] ?? '') !== 'SUCCESS' || ($data['result_code'] ?? '') !== 'SUCCESS') {
+            $this->xmlResponse('SUCCESS', 'OK');
+        }
+        if (($data['appid'] ?? '') !== $appId) {
+            Log::warning('微信支付回调 appid 不匹配：' . ($data['appid'] ?? ''));
+            $this->xmlResponse('FAIL', 'appid error');
+        }
+        if (($data['mch_id'] ?? '') !== $mchId) {
+            Log::warning('微信支付回调 mch_id 不匹配：' . ($data['mch_id'] ?? ''));
+            $this->xmlResponse('FAIL', 'mch_id error');
+        }
+
+        $orderNo = $data['out_trade_no'] ?? '';
+        if (!$orderNo) {
+            $this->xmlResponse('FAIL', 'order missing');
+        }
+
+        Db::startTrans();
+        try {
+            /** @var ScoreRechargeOrder|null $order */
+            $order = ScoreRechargeOrder::where('order_no', $orderNo)->lock(true)->find();
+            if (!$order) {
+                throw new Exception('订单不存在');
+            }
+
+            if (intval($order->pay_status) === ScoreRechargeOrder::PAY_STATUS_PAID) {
+                Db::commit();
+                $this->xmlResponse('SUCCESS', 'OK');
+            }
+
+            $totalFee = intval(bcmul((string)$order->amount, '100', 0));
+            if (intval($data['total_fee'] ?? 0) !== $totalFee) {
+                throw new Exception('支付金额校验失败');
+            }
+
+            $totalScore = intval($order->score) + intval($order->bonus_score);
+            if ($totalScore <= 0) {
+                throw new Exception('充值积分异常');
+            }
+
+            /** @var User|null $user */
+            $user = User::where('id', intval($order->user_id))->lock(true)->find();
+            if (!$user) {
+                throw new Exception('用户不存在');
+            }
+
+            $beforeScore = intval($user->score ?? 0);
+            $afterScore = $beforeScore + $totalScore;
+            $user->score = $afterScore;
+
+            $expireDays = intval(ScoreConfig::getConfigValue('score_expire_days', 0));
+            if ($expireDays > 0) {
+                $user->score_expire_time = time() + ($expireDays * 86400);
+            } else {
+                $user->score_expire_time = null;
+            }
+            $user->save();
+
+            UserScoreLog::create([
+                'user_id' => intval($order->user_id),
+                'score' => $totalScore,
+                'before' => $beforeScore,
+                'after' => $afterScore,
+                'memo' => '充值积分-订单' . $order->order_no,
+            ]);
+
+            $order->pay_status = ScoreRechargeOrder::PAY_STATUS_PAID;
+            $order->pay_time = time();
+            $order->save();
+
+            Db::commit();
+        } catch (Exception $e) {
+            Db::rollback();
+            Log::error('微信支付回调处理失败：' . $e->getMessage() . '，raw=' . $rawXml);
+            $this->xmlResponse('FAIL', $e->getMessage());
+        }
+
+        $this->xmlResponse('SUCCESS', 'OK');
     }
 
     /**
@@ -235,6 +490,140 @@ class Score extends Frontend
             'consumed' => $needScore,
             'balance' => $scoreInfo['score'],
         ]);
+    }
+
+    /**
+     * 微信支付签名
+     */
+    private function buildWechatPaySign(array $params, string $apiKey): string
+    {
+        ksort($params);
+        $pairs = [];
+        foreach ($params as $key => $value) {
+            if ($key === 'sign' || $value === '' || $value === null) {
+                continue;
+            }
+            $pairs[] = $key . '=' . $value;
+        }
+        $pairs[] = 'key=' . $apiKey;
+        return strtoupper(md5(implode('&', $pairs)));
+    }
+
+    /**
+     * 校验微信支付签名
+     */
+    private function verifyWechatPaySign(array $params, string $apiKey): bool
+    {
+        $sign = $params['sign'] ?? '';
+        if (!$sign) {
+            return false;
+        }
+        return $sign === $this->buildWechatPaySign($params, $apiKey);
+    }
+
+    /**
+     * 数组转 XML
+     */
+    private function arrayToXml(array $params): string
+    {
+        $xml = '<xml>';
+        foreach ($params as $key => $value) {
+            if (is_numeric($value)) {
+                $xml .= "<{$key}>{$value}</{$key}>";
+            } else {
+                $xml .= "<{$key}><![CDATA[{$value}]]></{$key}>";
+            }
+        }
+        $xml .= '</xml>';
+        return $xml;
+    }
+
+    /**
+     * XML 转数组
+     */
+    private function xmlToArray(string $xml): array
+    {
+        $obj = simplexml_load_string($xml, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NONET);
+        if ($obj === false) {
+            throw new Exception('XML解析失败');
+        }
+        return json_decode(json_encode($obj), true) ?: [];
+    }
+
+    /**
+     * POST XML 请求
+     */
+    private function httpPostXml(string $url, string $xml): string
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: text/xml; charset=utf-8']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $resp = curl_exec($ch);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($resp === false || $error) {
+            throw new Exception('微信接口请求失败：' . ($error ?: 'unknown'));
+        }
+        return (string)$resp;
+    }
+
+    /**
+     * 输出微信回调响应 XML
+     */
+    private function xmlResponse(string $returnCode, string $returnMsg): void
+    {
+        $xml = $this->arrayToXml([
+            'return_code' => $returnCode,
+            'return_msg' => $returnMsg,
+        ]);
+        $response = Response::create($xml, 'html', 200)->contentType('text/xml; charset=utf-8');
+        throw new HttpResponseException($response);
+    }
+
+    /**
+     * 从 .env 文件中读取键值（兜底）
+     */
+    private function getEnvFileValue(string $key): string
+    {
+        static $flatEnv = null;
+        if ($flatEnv === null) {
+            $flatEnv = [];
+            $envPath = root_path() . '.env';
+            if (is_file($envPath)) {
+                $lines = @file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                if (is_array($lines)) {
+                    foreach ($lines as $line) {
+                        $line = trim((string)$line);
+                        if ($line === '' || str_starts_with($line, '#')) {
+                            continue;
+                        }
+                        // 跳过 [SECTION] 行
+                        if (preg_match('/^\[[^\]]+\]$/', $line)) {
+                            continue;
+                        }
+                        $pos = strpos($line, '=');
+                        if ($pos === false) {
+                            continue;
+                        }
+                        $k = strtoupper(trim(substr($line, 0, $pos)));
+                        $v = trim(substr($line, $pos + 1));
+                        $v = trim($v, " \t\n\r\0\x0B\"'");
+                        if ($k !== '') {
+                            $flatEnv[$k] = $v;
+                        }
+                    }
+                }
+            }
+        }
+
+        return (string)($flatEnv[strtoupper($key)] ?? '');
     }
 
     /**

@@ -35,12 +35,16 @@
 			return {
 				imageUrl: '',
 				content: '',
+				templateId: 0,
+				subTemplateId: 0,
 				submitting: false
 			}
 		},
 		onLoad(options) {
 			if (options.url) {
 				this.imageUrl = decodeURIComponent(options.url)
+				this.templateId = parseInt(options.templateId || 0)
+				this.subTemplateId = parseInt(options.subTemplateId || 0)
 			} else {
 				uni.showToast({ title: '缺少图片参数', icon: 'none' })
 				setTimeout(() => uni.navigateBack(), 1500)
@@ -58,7 +62,9 @@
 				try {
 					await post('/api/discovery/publish', {
 						image_url: this.imageUrl,
-						content: this.content
+						content: this.content,
+						template_id: this.templateId,
+						sub_template_id: this.subTemplateId
 					})
 
 					uni.showToast({ title: '发布成功', icon: 'success' })

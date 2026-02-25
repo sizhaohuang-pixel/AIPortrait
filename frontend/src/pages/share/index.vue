@@ -45,6 +45,13 @@
 			}
 		},
 		onLoad(query) {
+			const inviterId = Number(query.inviter_id || 0)
+			if (inviterId > 0) {
+				uni.setStorageSync('pending_inviter_id', inviterId)
+				uni.switchTab({ url: '/pages/index/index' })
+				return
+			}
+
 			this.shareCode = query.code || ''
 			this.targetIndex = parseInt(query.idx) || 0
 			if (this.shareCode) {
