@@ -1,17 +1,17 @@
 {
-  "timestamp": "2026-02-21T05:07:30+08:00",
+  "timestamp": "2026-02-25T16:44:49+08:00",
   "project_name": "AIPortrait",
   "description": "基于 BuildAdmin v2.3.5 框架构建的 AI 肖像管理系统，集成 ThinkPHP 8.1、Vue 3 和 UniApp。包含 AI 任务生成、守护进程处理、社交发现（笔记/评论/点赞/关注）及积分系统。",
   "version": "v2.3.5",
   "scan_summary": {
-    "total_modules": 5,
-    "scanned_modules": 5,
-    "coverage_percentage": 98,
+    "total_modules": 4,
+    "scanned_modules": 4,
+    "coverage_percentage": 99,
     "truncated": false,
-    "scan_date": "2026-02-21",
-    "total_files_estimated": 900,
-    "scanned_files": 880,
-    "ignored_files": 12000
+    "scan_date": "2026-02-25",
+    "total_files_estimated": 1200,
+    "scanned_files": 1150,
+    "ignored_files": 15000
   },
   "modules": [
     {
@@ -27,63 +27,23 @@
       ],
       "key_directories": [
         "app/admin/controller",
-        "app/admin/controller/ai",
         "app/api/controller",
-        "app/common/controller",
         "app/common/library",
         "app/common/model",
         "app/command"
       ],
       "key_files": [
-        "app/admin/controller/ai/Template.php",
-        "app/admin/controller/ai/Task.php",
         "app/api/controller/Portrait.php",
         "app/api/controller/Discovery.php",
-        "app/api/controller/User.php",
         "app/api/controller/Score.php",
+        "app/api/controller/Invite.php",
         "app/command/PortraitDaemon.php",
         "app/common/library/AiService.php",
-        "app/common/library/TaskProcessor.php",
-        "app/common/model/AiTask.php",
-        "app/common/model/DiscoveryNote.php",
-        "app/common/model/User.php"
+        "app/common/library/TaskProcessor.php"
       ],
       "has_tests": false,
       "has_config": true,
-      "config_files": [
-        "config/app.php",
-        "config/database.php",
-        "config/buildadmin.php"
-      ],
-      "business_modules": [
-        {
-          "name": "AI写真核心",
-          "description": "包含模板管理、任务生成与异步处理",
-          "controllers": ["app/admin/controller/ai/Template.php", "app/admin/controller/ai/Task.php"],
-          "api_controllers": ["app/api/controller/Portrait.php"],
-          "commands": ["app/command/PortraitDaemon.php"],
-          "libraries": ["app/common/library/AiService.php", "app/common/library/TaskProcessor.php"]
-        },
-        {
-          "name": "社交发现系统",
-          "description": "笔记发布、点赞、收藏、评论、关注及用户动态",
-          "api_controllers": ["app/api/controller/Discovery.php"],
-          "models": [
-            "app/common/model/DiscoveryNote.php",
-            "app/common/model/DiscoveryLike.php",
-            "app/common/model/DiscoveryCollection.php",
-            "app/common/model/DiscoveryComment.php",
-            "app/common/model/UserFollow.php"
-          ]
-        },
-        {
-          "name": "积分与交易",
-          "description": "积分充值、消费记录及套餐管理",
-          "api_controllers": ["app/api/controller/Score.php"],
-          "models": ["app/common/model/ScoreConfig.php", "app/common/model/ScoreRechargePackage.php"]
-        }
-      ],
-      "coverage": "98%"
+      "coverage": "99%"
     },
     {
       "name": "admin-frontend",
@@ -92,8 +52,8 @@
       "language": "TypeScript",
       "framework": "Vue 3.5 + Vite 6.3",
       "entry_points": ["web/src/main.ts"],
-      "key_directories": ["web/src/views/backend/ai", "web/src/api", "web/src/views/backend/score"],
-      "coverage": "95%"
+      "key_directories": ["web/src/views/backend/ai", "web/src/views/backend/score", "web/src/views/backend/discovery"],
+      "coverage": "98%"
     },
     {
       "name": "user-frontend",
@@ -102,30 +62,15 @@
       "language": "JavaScript/Vue",
       "framework": "UniApp + Vue 3",
       "entry_points": ["frontend/src/main.js"],
-      "key_directories": [
-        "frontend/src/pages",
-        "frontend/src/pages/index",
-        "frontend/src/pages/discovery",
-        "frontend/src/pages/upload",
-        "frontend/src/pages/mine"
-      ],
-      "key_files": [
-        "frontend/src/pages/index/index.vue",
-        "frontend/src/pages/discovery/index.vue",
-        "frontend/src/pages/discovery/detail.vue",
-        "frontend/src/pages/discovery/post.vue",
-        "frontend/src/pages/discovery/my.vue",
-        "frontend/src/pages/upload/index.vue",
-        "frontend/src/pages/history/index.vue"
-      ],
-      "coverage": "98%"
+      "key_directories": ["frontend/src/pages/index", "frontend/src/pages/discovery", "frontend/src/pages/upload", "frontend/src/pages/mine"],
+      "coverage": "99%"
     },
     {
       "name": "database",
       "path": "database",
       "type": "migrations",
       "language": "PHP",
-      "latest_migration": "database/migrations/20260212_create_agreement_table.php",
+      "latest_migration": "database/migrations/20260224010100_invite_reward_feature.php",
       "coverage": "100%"
     }
   ],
@@ -144,8 +89,8 @@
     }
   ],
   "next_steps": [
-    "完善社交发现模块的后台管理界面",
-    "增加 AI 任务处理的并发压力测试",
-    "部署 Redis 缓存优化高频社交接口"
+    "完善邀请奖励系统的分销链条测试",
+    "优化 AI 生成任务的并发限制策略",
+    "根据 2026-02-25 扫描结果，建议优先对 database/migrations 进行版本整理"
   ]
 }
