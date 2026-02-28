@@ -75,6 +75,7 @@ class Template extends Backend
             }
 
             $data = $this->excludeFields($data);
+            $this->normalizeGenderField($data);
 
             // 添加时间戳
             $data['createtime'] = time();
@@ -127,6 +128,7 @@ class Template extends Backend
             }
 
             $data = $this->excludeFields($data);
+            $this->normalizeGenderField($data);
 
             // 更新时间戳
             $data['updatetime'] = time();
@@ -160,6 +162,9 @@ class Template extends Backend
         $subTemplates = \app\common\model\AiTemplateSub::where('template_id', $id)
             ->order('sort', 'asc')
             ->select();
+
+        // 老王提示：checkbox 组件需要数组值，避免 "1,2" 被按字符拆解
+        $row['gender'] = $this->genderValueForForm($row['gender'] ?? '');
 
         $this->success('', [
             'row' => $row,
@@ -240,6 +245,57 @@ class Template extends Backend
             'total'  => $res->total(),
             'remark' => get_route_remark(),
         ]);
+    }
+
+    /**
+     * 规范化 gender 字段为逗号分隔字符串（1,2）
+     */
+    private function normalizeGenderField(array &$data): void
+    {
+        if (!array_key_exists('gender', $data)) {
+            return;
+        }
+
+        $data['gender'] = $this->genderValueForStore($data['gender']);
+    }
+
+    /**
+     * 将任意 gender 输入值转换为可落库格式
+     */
+    private function genderValueForStore(mixed $gender): string
+    {
+        if (is_array($gender)) {
+            $values = $gender;
+        } elseif (is_string($gender) || is_numeric($gender)) {
+            $raw = trim((string)$gender);
+            $values = $raw === '' ? [] : explode(',', $raw);
+        } else {
+            $values = [];
+        }
+
+        $normalized = [];
+        foreach ($values as $value) {
+            $intValue = (int)$value;
+            if ($intValue === 1 || $intValue === 2) {
+                $normalized[$intValue] = (string)$intValue;
+            }
+        }
+
+        if (empty($normalized)) {
+            return '';
+        }
+
+        ksort($normalized);
+        return implode(',', $normalized);
+    }
+
+    /**
+     * 回填给后台表单的 gender 值
+     */
+    private function genderValueForForm(mixed $gender): array
+    {
+        $value = $this->genderValueForStore($gender);
+        return $value === '' ? [] : explode(',', $value);
     }
 
 }

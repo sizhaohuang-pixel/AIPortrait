@@ -46,11 +46,12 @@ class AiTemplate extends Model
     {
         if (empty($data['gender'])) return '未指定';
         $genders = [1 => '男', 2 => '女'];
-        $ids = explode(',', $data['gender']);
+        $ids = is_array($data['gender']) ? $data['gender'] : explode(',', (string)$data['gender']);
         $res = [];
         foreach ($ids as $id) {
-            if (isset($genders[$id])) $res[] = $genders[$id];
+            $genderId = (int)$id;
+            if (isset($genders[$genderId])) $res[] = $genders[$genderId];
         }
-        return implode(',', $res);
+        return empty($res) ? '未指定' : implode(',', $res);
     }
 }

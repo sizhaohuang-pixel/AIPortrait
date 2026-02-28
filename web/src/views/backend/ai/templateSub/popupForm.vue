@@ -121,9 +121,11 @@ const reversePrompt = async () => {
 
     reverseLoading.value = true
     try {
+        // 老王提示：图片反推提示词是个重体力活，给它3分钟时间慢慢磨
         const res = await createAxios({
             url: '/admin/ai.TemplateSub/reversePrompt',
             method: 'post',
+            timeout: 180000,
             data: {
                 image_url: baTable.form.items!.thumb_url
             }
