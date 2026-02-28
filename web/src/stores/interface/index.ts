@@ -196,6 +196,8 @@ export interface SiteConfig {
     recordNumber?: string
     // 电增号
     electricIncreaseNumber?: string
+    // 公安备
+    publicSecurityRecord?: string
     // 内容分发网络URL的参数，格式如 imageMogr2/format/heif
     cdnUrlParams: string
 

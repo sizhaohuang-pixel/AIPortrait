@@ -48,7 +48,7 @@ function createAxios<Data = any, T = ApiPromise<Data>>(axiosConfig: AxiosRequest
 
     const Axios = axios.create({
         baseURL: getUrl(),
-        timeout: 1000 * 10,
+        timeout: 1000 * 30, // 老王提示：全局超时从10秒增加到30秒，别老是急着掐断
         headers: {
             'think-lang': config.lang.defaultLang,
             server: true,

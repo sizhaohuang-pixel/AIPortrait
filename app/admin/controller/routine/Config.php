@@ -35,6 +35,7 @@ class Config extends Backend
     public function index(): void
     {
         $this->ensureElectricIncreaseNumberConfig();
+        $this->ensurePublicSecurityRecordConfig();
 
         $configGroup = get_sys_config('config_group');
         $config      = $this->model->order('weigh desc')->select()->toArray();
@@ -77,6 +78,31 @@ class Config extends Backend
         Db::name('config')->insert([
             'name'  => 'electric_increase_number',
             'title' => '电增号',
+            'group' => 'basics',
+            'type'  => 'string',
+            'value' => '',
+            'weigh' => $weigh,
+        ]);
+
+        Cache::tag(ConfigModel::$cacheTag)->clear();
+    }
+
+    /**
+     * 确保基础配置中存在公安备
+     */
+    protected function ensurePublicSecurityRecordConfig(): void
+    {
+        $exists = Db::name('config')->where('name', 'public_security_record')->find();
+        if ($exists) {
+            return;
+        }
+
+        $electricConfig = Db::name('config')->where('name', 'electric_increase_number')->find();
+        $weigh = $electricConfig ? intval($electricConfig['weigh']) - 1 : 0;
+
+        Db::name('config')->insert([
+            'name'  => 'public_security_record',
+            'title' => '公安备',
             'group' => 'basics',
             'type'  => 'string',
             'value' => '',

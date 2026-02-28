@@ -169,6 +169,7 @@
 		<view class="footer">
 			<text v-if="siteConfig.recordNumber">{{ siteConfig.recordNumber }}</text>
 			<text v-if="siteConfig.electricIncreaseNumber">{{ siteConfig.electricIncreaseNumber }}</text>
+			<text v-if="siteConfig.publicSecurityRecord">{{ siteConfig.publicSecurityRecord }}</text>
 		</view>
 	</view>
 </template>
@@ -185,7 +186,7 @@
 				userInfo: { nickname: '', mobile: '', avatar: '' },
 				scoreInfo: { score: 0, expire_time: 0, expire_days: 0 },
 				userStats: { received_likes: 0, received_collections: 0, fans_count: 0, follow_count: 0 },
-				siteConfig: { recordNumber: '', electricIncreaseNumber: '' }
+				siteConfig: { recordNumber: '', electricIncreaseNumber: '', publicSecurityRecord: '' }
 			}
 		},
 		computed: {
@@ -261,7 +262,8 @@
 					const site = data && data.site ? data.site : {}
 					this.siteConfig = {
 						recordNumber: site.recordNumber || '',
-						electricIncreaseNumber: site.electricIncreaseNumber || ''
+						electricIncreaseNumber: site.electricIncreaseNumber || '',
+						publicSecurityRecord: site.publicSecurityRecord || ''
 					}
 				} catch (error) {
 					console.error('获取站点配置失败:', error)

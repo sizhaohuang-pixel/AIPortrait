@@ -54,6 +54,9 @@
 			<view v-if="imageUrls.length" class="upload-actions">
 				<view class="clear-btn" @tap="clearAll">清空全部</view>
 			</view>
+			<view class="upload-legal-tip">
+				请确定您对上传的照片拥有合法使用权力或已取得他人合法授权
+			</view>
 		</view>
 
 		<!-- 选择模式 -->
@@ -560,6 +563,13 @@
 		margin-top: 8rpx;
 		font-size: 22rpx;
 		color: #9a7b7b;
+	}
+
+	.upload-legal-tip {
+		margin-top: 14rpx;
+		font-size: 22rpx;
+		line-height: 1.5;
+		color: #8f6e5f;
 	}
 
 	/* 模式选择样式 */

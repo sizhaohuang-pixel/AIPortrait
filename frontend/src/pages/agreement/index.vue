@@ -10,8 +10,18 @@
 
 		<view v-else class="content">
 			<view class="title">{{ state.title }}</view>
-			<view class="rich-text-wrapper">
-				<rich-text :nodes="state.content"></rich-text>
+			<view class="rich-content">
+				<view v-for="(node, index) in state.parsedContent" :key="index">
+					<image
+						v-if="node.type === 'image'"
+						:src="node.src"
+						:mode="node.mode || 'widthFix'"
+						class="content-image"
+						show-menu-by-longpress
+						@tap="previewImage(node.src)"
+					></image>
+					<rich-text v-else :nodes="node.html"></rich-text>
+				</view>
 			</view>
 		</view>
 	</view>
@@ -28,7 +38,8 @@
 					error: '',
 					type: '', // privacy 或 user
 					title: '',
-					content: ''
+					content: '',
+					parsedContent: []
 				}
 			}
 		},
@@ -55,12 +66,75 @@
 
 					this.state.title = data.title
 					this.state.content = data.content
+					this.parseContent(data.content)
 				} catch (error) {
 					console.error('获取协议失败:', error)
 					this.state.error = '获取协议失败，请稍后重试'
 				} finally {
 					this.state.loading = false
 				}
+			},
+
+			parseContent(html) {
+				if (!html) {
+					this.state.parsedContent = []
+					return
+				}
+
+				const nodes = []
+				const imgRegex = /<img[^>]+src=['"]([^'"]+)['"][^>]*>/gi
+				let lastIndex = 0
+				let match
+
+				while ((match = imgRegex.exec(html)) !== null) {
+					if (match.index > lastIndex) {
+						const beforeHtml = html.substring(lastIndex, match.index)
+						if (beforeHtml.trim()) {
+							nodes.push({
+								type: 'html',
+								html: beforeHtml
+							})
+						}
+					}
+
+					nodes.push({
+						type: 'image',
+						src: match[1],
+						mode: 'widthFix'
+					})
+
+					lastIndex = imgRegex.lastIndex
+				}
+
+				if (lastIndex < html.length) {
+					const afterHtml = html.substring(lastIndex)
+					if (afterHtml.trim()) {
+						nodes.push({
+							type: 'html',
+							html: afterHtml
+						})
+					}
+				}
+
+				if (nodes.length === 0) {
+					nodes.push({
+						type: 'html',
+						html: html
+					})
+				}
+
+				this.state.parsedContent = nodes
+			},
+
+			previewImage(src) {
+				const urls = this.state.parsedContent
+					.filter(node => node.type === 'image')
+					.map(node => node.src)
+
+				uni.previewImage({
+					current: src,
+					urls
+				})
 			}
 		}
 	}
@@ -98,39 +172,46 @@
 		text-align: center;
 	}
 
-	.rich-text-wrapper {
+	.rich-content {
 		font-size: 28rpx;
 		line-height: 1.8;
 		color: #333;
 	}
 
+	.content-image {
+		width: 100%;
+		display: block;
+		margin: 20rpx 0;
+		border-radius: 12rpx;
+	}
+
 	/* 艹，富文本样式优化 */
-	.rich-text-wrapper :deep(h2) {
+	.rich-content :deep(h2) {
 		font-size: 32rpx;
 		font-weight: 700;
 		color: #2b2521;
 		margin: 32rpx 0 20rpx;
 	}
 
-	.rich-text-wrapper :deep(h3) {
+	.rich-content :deep(h3) {
 		font-size: 30rpx;
 		font-weight: 600;
 		color: #2b2521;
 		margin: 28rpx 0 16rpx;
 	}
 
-	.rich-text-wrapper :deep(p) {
+	.rich-content :deep(p) {
 		margin: 16rpx 0;
 		text-indent: 2em;
 	}
 
-	.rich-text-wrapper :deep(ul),
-	.rich-text-wrapper :deep(ol) {
+	.rich-content :deep(ul),
+	.rich-content :deep(ol) {
 		padding-left: 40rpx;
 		margin: 16rpx 0;
 	}
 
-	.rich-text-wrapper :deep(li) {
+	.rich-content :deep(li) {
 		margin: 8rpx 0;
 	}
 </style>

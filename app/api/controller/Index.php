@@ -74,6 +74,7 @@ class Index extends Frontend
                 'upload'       => keys_to_camel_case(get_upload_config(), ['max_size', 'save_name', 'allowed_suffixes', 'allowed_mime_types']),
                 'recordNumber' => get_sys_config('record_number'),
                 'electricIncreaseNumber' => get_sys_config('electric_increase_number'),
+                'publicSecurityRecord' => get_sys_config('public_security_record'),
                 'cdnUrlParams' => Config::get('buildadmin.cdn_url_params'),
             ],
             'openMemberCenter' => Config::get('buildadmin.open_member_center'),
