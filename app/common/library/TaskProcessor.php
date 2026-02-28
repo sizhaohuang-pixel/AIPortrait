@@ -128,7 +128,7 @@ class TaskProcessor
                     'task_id' => $taskId,
                 ]);
 
-                // 艹，第一步：只提交 seedream-v4.5 任务，不等待结果
+                // 艹，第一步：只提交 seedream-v5-lite 任务，不等待结果
                 // 专业模式第一步必须走 seedream（mode=1）
                 $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 1, 1);
 
@@ -154,7 +154,7 @@ class TaskProcessor
 
                 return true;
             } else {
-                // 艹，梦幻模式：直接用 seedream-v4.5 生成
+                // 艹，梦幻模式：直接用 seedream-v5-lite 生成
                 Log::info("TaskProcessor 开始生成4张图片（梦幻模式）", [
                     'task_id' => $taskId,
                     'prompt' => is_array($prompt) ? json_encode($prompt) : $prompt,
@@ -554,11 +554,7 @@ class TaskProcessor
         }
 
         $taskStatus = $queryResult['status'];
-        Log::info("TaskProcessor 查询API任务状态", [
-            'result_id' => $result->id,
-            'api_task_id' => $result->api_task_id,
-            'status' => $taskStatus,
-        ]);
+        Log::info("TaskProcessor 查询API任务状态");
 
         // 艹，根据状态处理
         if ($taskStatus === 'SUCCESS') {
@@ -566,7 +562,25 @@ class TaskProcessor
             $this->updateTaskProgress($result->task_id);
             $updatedTaskIds[$result->task_id] = true;
         } elseif ($taskStatus === 'FAILED') {
-            $this->handleTaskFailure($result);
+            $errorCode = intval($queryResult['code'] ?? -1);
+            $elapsed = time() - intval($result->create_time ?? time());
+
+            // 兼容 seedream-v5-lite：任务刚提交时偶发返回 805，先短暂继续轮询，避免误判失败
+            if ($errorCode === 805 && $elapsed < 20) {
+                Log::warning("TaskProcessor 任务刚提交即返回805，先继续轮询", [
+                    'result_id' => $result->id,
+                    'api_task_id' => $result->api_task_id,
+                    'elapsed' => $elapsed,
+                ]);
+
+                if (!isset($updatedTaskIds[$result->task_id])) {
+                    $this->updateTaskProgress($result->task_id);
+                    $updatedTaskIds[$result->task_id] = true;
+                }
+                return;
+            }
+
+            $this->handleTaskFailure($result, $queryResult['error'] ?? 'API任务失败');
             $this->updateTaskProgress($result->task_id);
             $updatedTaskIds[$result->task_id] = true;
         } else {
@@ -599,16 +613,13 @@ class TaskProcessor
      * 处理任务失败
      * 艹，更新任务结果为失败状态
      */
-    protected function handleTaskFailure($result)
+    protected function handleTaskFailure($result, $errorMsg = 'API任务失败')
     {
         $result->status = 2;
-        $result->error_msg = 'API任务失败';
+        $result->error_msg = $errorMsg ?: 'API任务失败';
         $result->save();
 
-        Log::error("TaskProcessor API任务失败", [
-            'result_id' => $result->id,
-            'api_task_id' => $result->api_task_id,
-        ]);
+        Log::error("TaskProcessor API任务失败: result_id={$result->id}, api_task_id={$result->api_task_id}, error_msg={$result->error_msg}");
     }
 
     /**

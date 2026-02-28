@@ -404,7 +404,7 @@ class Portrait extends Frontend
                 // 艹，读取积分配置的模式2倍率，如果没有配置则默认为2
                 $modeRate = floatval(ScoreConfig::getConfigValue('mode2_rate', 2));
             } else {
-                // 艹，梦幻模式：只用 seedream-v4.5
+                // 艹，梦幻模式：只用 seedream-v5-lite
                 // 艹，读取积分配置的模式1倍率，如果没有配置则默认为1
                 $modeRate = floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
             }

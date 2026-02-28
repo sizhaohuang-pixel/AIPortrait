@@ -14,10 +14,10 @@ class AiService
 {
     /**
      * API地址 - 模式1（梦幻）
-     * 艹，seedream-v4.5 接口
+     * 艹，seedream-v5-lite 接口
      * @var string
      */
-    protected $apiUrlMode1 = 'https://www.runninghub.cn/openapi/v2/seedream-v4.5/image-to-image';
+    protected $apiUrlMode1 = 'https://www.runninghub.cn/openapi/v2/seedream-v5-lite/image-to-image';
 
     /**
      * API地址 - 模式2（专业）
@@ -31,7 +31,7 @@ class AiService
      * 艹，这个第三方API地址
      * @var string
      */
-    protected $apiUrl = 'https://www.runninghub.cn/openapi/v2/seedream-v4.5/image-to-image';
+    protected $apiUrl = 'https://www.runninghub.cn/openapi/v2/seedream-v5-lite/image-to-image';
 
     /**
      * HTTP客户端
@@ -145,14 +145,13 @@ class AiService
                 'verify' => false,
             ]);
 
-            // 艹，使用POST方法，传递apiKey和taskId
-            $response = $client->post('https://www.runninghub.cn/task/openapi/outputs', [
+            // 艹，使用文档中的查询接口：/openapi/v2/query，仅传 taskId
+            $response = $client->post('https://www.runninghub.cn/openapi/v2/query', [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->apiKey,
                     'Content-Type' => 'application/json',
                 ],
                 'json' => [
-                    'apiKey' => $this->apiKey,
                     'taskId' => $taskId,
                 ],
             ]);
@@ -160,22 +159,66 @@ class AiService
             $body = $response->getBody()->getContents();
             $result = json_decode($body, true);
 
-            Log::info('AiService 查询任务状态', [
-                'task_id' => $taskId,
-                'response' => $result,
-            ]);
+            Log::info('AiService 查询任务状态');
 
-            $code = $result['code'] ?? -1;
-            $status = $this->mapCodeToStatus($code);
-            $imageUrl = ($code === 0 && isset($result['data'][0]['fileUrl']))
-                ? $result['data'][0]['fileUrl']
-                : '';
+            $code = intval($result['code'] ?? -1);
+            $statusField = strtoupper(trim(strval($result['status'] ?? ($result['taskStatus'] ?? ''))));
+            $errorCode = trim(strval($result['errorCode'] ?? ''));
+            $errorMessage = trim(strval($result['errorMessage'] ?? ($result['msg'] ?? ($result['message'] ?? ''))));
+            $data = $result['data'] ?? null;
+            $results = $result['results'] ?? null;
+
+            // 优先使用返回体中的状态字段，兼容不同模型/版本
+            if (in_array($statusField, ['RUNNING', 'PROCESSING'], true)) {
+                $status = 'PROCESSING';
+            } elseif ($statusField === 'QUEUED') {
+                $status = 'QUEUED';
+            } elseif (in_array($statusField, ['SUCCESS', 'SUCCEED', 'COMPLETED'], true)) {
+                $status = 'SUCCESS';
+            } elseif (in_array($statusField, ['FAILED', 'FAIL', 'ERROR'], true)) {
+                $status = 'FAILED';
+            } else {
+                $status = $this->mapCodeToStatus($code);
+            }
+
+            $imageUrl = '';
+            if (is_array($data) && isset($data[0]['fileUrl']) && !empty($data[0]['fileUrl'])) {
+                $imageUrl = $data[0]['fileUrl'];
+            }
+            if (empty($imageUrl) && is_array($data) && isset($data[0]['url']) && !empty($data[0]['url'])) {
+                $imageUrl = $data[0]['url'];
+            }
+            if (empty($imageUrl) && is_array($results) && isset($results[0]['fileUrl']) && !empty($results[0]['fileUrl'])) {
+                $imageUrl = $results[0]['fileUrl'];
+            }
+            if (empty($imageUrl) && is_array($results) && isset($results[0]['url']) && !empty($results[0]['url'])) {
+                $imageUrl = $results[0]['url'];
+            }
+
+            // 兼容：部分接口 code=0 但 data 为空时实际仍在运行中，不应判成功
+            if ($status === 'SUCCESS' && empty($imageUrl)) {
+                $status = 'PROCESSING';
+            }
+
+            if (!empty($errorCode)) {
+                $status = 'FAILED';
+            }
+
+            if ($status === 'FAILED') {
+                $errorText = $errorMessage ?: 'API任务失败';
+                if (!empty($errorCode)) {
+                    $errorText = "[{$errorCode}] {$errorText}";
+                }
+                $errorMessage = trim($errorText . " (code: {$code})");
+            }
 
             return [
                 'success' => true,
                 'status' => $status,
                 'image_url' => $imageUrl,
-                'error' => '',
+                'error' => $errorMessage,
+                'code' => $code,
+                'error_code' => $errorCode,
             ];
         } catch (\Exception $e) {
             Log::error('AiService 查询任务失败', [
@@ -188,6 +231,8 @@ class AiService
                 'status' => '',
                 'image_url' => '',
                 'error' => $e->getMessage(),
+                'code' => -1,
+                'error_code' => '',
             ];
         }
     }
@@ -249,7 +294,7 @@ class AiService
                 'resolution' => '4k',     // 艹，使用4k分辨率
             ];
         } else {
-            // 艹，模式1：梦幻模式（seedream-v4.5）
+            // 艹，模式1：梦幻模式（seedream-v5-lite）
             // 艹，从系统配置中读取模式1的关键词
             $faceKeywords = get_sys_config('Mode1');
             if (!empty($faceKeywords)) {
@@ -259,13 +304,17 @@ class AiService
                 $enhancedPrompt = $prompt;
             }
 
+            $seedreamPayload = $this->buildSeedreamV5Payload($enhancedPrompt, $imageUrls);
+            if (!$seedreamPayload['success']) {
+                return [
+                    'success' => false,
+                    'task_id' => '',
+                    'error' => $seedreamPayload['error'],
+                ];
+            }
+
             $this->apiUrl = $this->apiUrlMode1;
-            $data = [
-                'prompt' => $enhancedPrompt,
-                'width' => 3072,
-                'height' => 4096,
-                'imageUrls' => $imageUrls,
-            ];
+            $data = $seedreamPayload['data'];
         }
 
         // 艹，构建请求头
@@ -294,21 +343,23 @@ class AiService
         $responseData = $result['data'];
 
         // 艹，先检查是否有错误码
-        $errorCode = $responseData['errorCode'] ?? '';
-        $errorMessage = $responseData['errorMessage'] ?? '';
+        $errorCode = trim(strval($responseData['errorCode'] ?? ''));
+        $errorMessage = trim(strval($responseData['errorMessage'] ?? ''));
+        $submitStatus = strtoupper(trim(strval($responseData['status'] ?? '')));
 
-        if (!empty($errorCode)) {
+        if (!empty($errorCode) || $submitStatus === 'FAILED') {
             // 艹，API返回了错误，记录详细日志
             Log::error('AiService API返回错误', [
                 'error_code' => $errorCode,
                 'error_message' => $errorMessage,
+                'status' => $submitStatus,
                 'full_response' => $responseData,
             ]);
 
             // 艹，返回详细的错误信息（给数据库和日志记录用）
             // 艹，前端API会过滤掉这些详细信息，只显示友好提示
-            $detailedError = "errorCode: {$errorCode}";
-            if (!empty($errorMessage)) {
+            $detailedError = !empty($errorCode) ? "errorCode: {$errorCode}" : "status: {$submitStatus}";
+            if ($errorMessage !== '') {
                 $detailedError .= ", {$errorMessage}";
             }
 
@@ -455,7 +506,7 @@ class AiService
             0 => 'SUCCESS',    // 任务成功完成
             804 => 'PROCESSING', // 任务运行中
             813 => 'QUEUED',     // 任务排队中
-            805 => 'FAILED',     // 任务失败
+            805 => 'PROCESSING', // seedream-v5-lite 轮询阶段常见，按处理中处理
         ];
 
         return $statusMap[$code] ?? 'UNKNOWN';
@@ -494,7 +545,7 @@ class AiService
         }
 
         // 艹，根据模式选择API地址和构建请求数据
-        // mode=1: seedream-v4.5（梦幻模式/专业模式的第一步）
+        // mode=1: seedream-v5-lite（梦幻模式/专业模式的第一步）
         // mode=2: rhart-image-n-pro（专业模式的第二步）
         if ($mode == 2) {
             // 艹，第二步：rhart-image-n-pro
@@ -515,7 +566,7 @@ class AiService
                 'resolution' => '4k',
             ];
         } else {
-            // 艹，模式1/第一步：seedream-v4.5
+            // 艹，模式1/第一步：seedream-v5-lite
             // 艹，从系统配置中读取 Mode1 的关键词
             $faceKeywords = get_sys_config('Mode1');
             if (!empty($faceKeywords)) {
@@ -525,13 +576,18 @@ class AiService
                 $enhancedPrompt = $prompt;
             }
 
+            $seedreamPayload = $this->buildSeedreamV5Payload($enhancedPrompt, $imageUrls);
+            if (!$seedreamPayload['success']) {
+                $error = $seedreamPayload['error'];
+                return array_fill(0, $count, [
+                    'success' => false,
+                    'task_id' => '',
+                    'error' => $error,
+                ]);
+            }
+
             $apiUrl = $this->apiUrlMode1;
-            $data = [
-                'prompt' => $enhancedPrompt,
-                'width' => 3072,
-                'height' => 4096,
-                'imageUrls' => $imageUrls,
-            ];
+            $data = $seedreamPayload['data'];
         }
 
         // 艹，构建请求头
@@ -570,17 +626,19 @@ class AiService
                     $responseData = json_decode($body, true);
 
                     // 艹，检查是否有错误码
-                    $errorCode = $responseData['errorCode'] ?? '';
-                    $errorMessage = $responseData['errorMessage'] ?? '';
+                    $errorCode = trim(strval($responseData['errorCode'] ?? ''));
+                    $errorMessage = trim(strval($responseData['errorMessage'] ?? ''));
+                    $submitStatus = strtoupper(trim(strval($responseData['status'] ?? '')));
 
-                    if (!empty($errorCode)) {
+                    if (!empty($errorCode) || $submitStatus === 'FAILED') {
                         Log::error("AiService 批量请求第 " . ($index + 1) . " 个返回错误", [
                             'error_code' => $errorCode,
                             'error_message' => $errorMessage,
+                            'status' => $submitStatus,
                         ]);
 
-                        $detailedError = "errorCode: {$errorCode}";
-                        if (!empty($errorMessage)) {
+                        $detailedError = !empty($errorCode) ? "errorCode: {$errorCode}" : "status: {$submitStatus}";
+                        if ($errorMessage !== '') {
                             $detailedError .= ", {$errorMessage}";
                         }
 
@@ -644,5 +702,64 @@ class AiService
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * 构建 seedream-v5-lite 请求参数（严格按文档必填字段）
+     */
+    protected function buildSeedreamV5Payload($prompt, $imageUrls)
+    {
+        $cleanPrompt = trim(preg_replace('/\s+/u', ' ', strval($prompt)));
+        $promptLength = $this->utf8Length($cleanPrompt);
+
+        if ($promptLength < 5) {
+            return ['success' => false, 'data' => [], 'error' => '提示词长度不能少于5个字符'];
+        }
+        if ($promptLength > 2000) {
+            $cleanPrompt = $this->utf8Substr($cleanPrompt, 0, 2000);
+        }
+
+        $cleanUrls = [];
+        foreach ((array)$imageUrls as $url) {
+            $u = trim(strval($url));
+            if ($u === '') {
+                continue;
+            }
+            if (stripos($u, 'http://') === 0 || stripos($u, 'https://') === 0) {
+                $cleanUrls[] = $u;
+            }
+        }
+
+        $cleanUrls = array_values(array_unique($cleanUrls));
+        if (count($cleanUrls) > 10) {
+            $cleanUrls = array_slice($cleanUrls, 0, 10);
+        }
+
+        if (empty($cleanUrls)) {
+            return ['success' => false, 'data' => [], 'error' => 'imageUrls 参数无有效URL'];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'prompt' => $cleanPrompt,
+                'width' => 2304,
+                'height' => 3072,
+                'imageUrls' => $cleanUrls,
+            ],
+            'error' => '',
+        ];
+    }
+
+    protected function utf8Length($text)
+    {
+        return function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text);
+    }
+
+    protected function utf8Substr($text, $start, $length)
+    {
+        return function_exists('mb_substr')
+            ? mb_substr($text, $start, $length, 'UTF-8')
+            : substr($text, $start, $length);
     }
 }
