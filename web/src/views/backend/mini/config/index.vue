@@ -83,6 +83,18 @@
 
                 <el-divider content-position="left">企业微信客服配置</el-divider>
 
+                <el-form-item label="客服悬浮气泡内容" prop="service_bubble_texts">
+                    <el-input
+                        v-model="state.form.service_bubble_texts"
+                        type="textarea"
+                        :rows="4"
+                        placeholder="请输入客服悬浮气泡内容，每行一条。如果不填则使用默认文案"
+                        maxlength="500"
+                        show-word-limit
+                    />
+                    <div class="form-item-tip">支持配置多条，小程序端每次随机展示一条（每行代表一条文案）</div>
+                </el-form-item>
+
                 <el-form-item label="企业微信 CorpId" prop="service_corp_id">
                     <el-input
                         v-model="state.form.service_corp_id"
@@ -133,6 +145,7 @@ const state = reactive({
         home_share_timeline_title: '',
         discovery_share_title: '',
         note_detail_share_title: '',
+        service_bubble_texts: '',
         service_corp_id: '',
         service_chat_url: '',
     },
@@ -166,6 +179,7 @@ const getConfig = async () => {
             state.form.home_share_timeline_title = configs.home_share_timeline_title?.value || 'AI写真：一键生成你的艺术大片'
             state.form.discovery_share_title = configs.discovery_share_title?.value || '发现更多惊艳的AI写真作品'
             state.form.note_detail_share_title = configs.note_detail_share_title?.value || '这张AI写真真的绝了，快来看看！'
+            state.form.service_bubble_texts = configs.service_bubble_texts?.value || ''
             state.form.service_corp_id = configs.service_corp_id?.value || ''
             state.form.service_chat_url = configs.service_chat_url?.value || ''
 
