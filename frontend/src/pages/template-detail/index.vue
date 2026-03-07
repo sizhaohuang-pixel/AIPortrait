@@ -1,7 +1,7 @@
 <template>
 	<view class="page">
 		<view class="hero">
-			<image class="hero-cover" :src="heroCoverUrl" mode="aspectFill" lazy-load></image>
+			<image :class="['hero-cover', getRatioClass(heroRatio)]" :src="heroCoverUrl" mode="aspectFill" lazy-load></image>
 			<view class="hero-mask"></view>
 			<view class="hero-content">
 				<view class="title">{{ template.title }}</view>
@@ -21,10 +21,10 @@
 				<view
 					v-for="item in processedSubTemplates"
 					:key="item.id"
-					:class="['sub-card', activeSubId === item.id ? 'is-active' : '']"
+					:class="['sub-card', getRatioClass(item.ratio), activeSubId === item.id ? 'is-active' : '']"
 					@tap="setSub(item.id)"
 				>
-					<image class="sub-thumb" :src="item.thumb_url" mode="aspectFill" lazy-load></image>
+					<image :class="['sub-thumb', getRatioClass(item.ratio)]" :src="item.thumb_url" mode="aspectFill" lazy-load></image>
 				</view>
 			</view>
 		</view>
@@ -38,13 +38,18 @@
 				下一步
 			</button>
 		</view>
+		<floating-service-button :show-signal="serviceSignal" :bottom-offset-upx="170" />
 	</view>
 </template>
 
 <script>
+	import FloatingServiceButton from '../../components/floating-service-button.vue'
 	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
+		components: {
+			'floating-service-button': FloatingServiceButton
+		},
 		data() {
 			return {
 				loading: true,
@@ -56,7 +61,10 @@
 					tags: [],
 					sub_templates: []
 				},
-				activeSubId: 0
+				activeSubId: 0,
+				heroRatio: '2:3',
+				subRatioMap: {},
+				serviceSignal: 0
 			}
 		},
 		computed: {
@@ -65,13 +73,11 @@
 					return item.id === this.activeSubId
 				}, this)
 				let url = (sub && sub.thumb_url) || this.template.cover_url
-				// 艹，处理图片 URL
 				if (url && url.startsWith('/') && !url.startsWith('http')) {
 					url = API_CONFIG.baseURL + url
 				}
 				return url
 			},
-			// 艹，处理子模板图片 URL
 			processedSubTemplates() {
 				return this.template.sub_templates.map(sub => {
 					let thumb_url = sub.thumb_url
@@ -80,7 +86,8 @@
 					}
 					return {
 						...sub,
-						thumb_url: thumb_url
+						thumb_url,
+						ratio: this.subRatioMap[sub.id] || '2:3'
 					}
 				})
 			}
@@ -99,20 +106,19 @@
 				}, 1500)
 			}
 		},
+		onShow() {
+			this.serviceSignal++
+		},
 		methods: {
-			// 加载模板详情
 			async loadTemplateDetail(templateId) {
 				try {
 					this.loading = true
-
-					// 直接使用 uni.request 调用 API
 					const data = await this.request(`/api/portrait/template?id=${templateId}`)
 					this.template = data.template
-
-					// 设置默认选中第一个子模板
 					if (this.template.sub_templates && this.template.sub_templates.length > 0) {
 						this.activeSubId = this.template.sub_templates[0].id
 					}
+					await this.prepareImageRatios()
 				} catch (error) {
 					console.error('加载模板详情失败：', error)
 					uni.showToast({
@@ -126,12 +132,10 @@
 					this.loading = false
 				}
 			},
-
-			// 封装请求方法
 			request(url) {
 				return new Promise((resolve, reject) => {
 					uni.request({
-						url: API_CONFIG.baseURL + url,  // 使用配置的 baseURL
+						url: API_CONFIG.baseURL + url,
 						method: 'GET',
 						success: (res) => {
 							if (res.statusCode === 200 && res.data.code === 1) {
@@ -146,13 +150,26 @@
 					})
 				})
 			},
-
-			// 选择子模板
+			getRatioClass(ratio) {
+				return ratio === '3:2' ? 'ratio-landscape' : 'ratio-portrait'
+			},
+			prepareImageRatios() {
+				const map = {}
+				const subs = this.template.sub_templates || []
+				subs.forEach((sub) => {
+					map[sub.id] = sub.thumb_ratio === '3:2' ? '3:2' : '2:3'
+				})
+				this.subRatioMap = map
+				if (this.activeSubId && map[this.activeSubId]) {
+					this.heroRatio = map[this.activeSubId]
+					return
+				}
+				this.heroRatio = this.template.cover_ratio === '3:2' ? '3:2' : '2:3'
+			},
 			setSub(subId) {
 				this.activeSubId = subId
+				this.heroRatio = this.subRatioMap[subId] || '2:3'
 			},
-
-			// 跳转到上传照片页面
 			goToUpload() {
 				if (!this.activeSubId) {
 					uni.showToast({
@@ -161,13 +178,9 @@
 					})
 					return
 				}
-
-				// 获取选中的子模板信息
 				const subTemplate = this.template.sub_templates.find(function(item) {
 					return item.id === this.activeSubId
 				}, this)
-
-				// 艹，跳转到上传照片页面，不再传递模式参数，让那边自己选
 				uni.navigateTo({
 					url: `/pages/upload/index?templateId=${this.template.id}&subTemplateId=${this.activeSubId}&title=${encodeURIComponent(this.template.title)}&subTemplateName=${encodeURIComponent(subTemplate ? subTemplate.title : '')}`
 				})
@@ -192,10 +205,18 @@
 
 	.hero-cover {
 		width: 100%;
-		aspect-ratio: 3 / 4;
-		height: 600rpx;
 		border-radius: 28rpx;
 		background: #f3f3f3;
+	}
+
+	.hero-cover.ratio-portrait {
+		aspect-ratio: 2 / 3;
+		height: auto;
+	}
+
+	.hero-cover.ratio-landscape {
+		aspect-ratio: 3 / 2;
+		height: auto;
 	}
 
 	.hero-mask {
@@ -269,6 +290,10 @@
 		box-shadow: 0 10rpx 20rpx rgba(37, 30, 25, 0.06);
 	}
 
+	.sub-card.ratio-landscape {
+		min-width: 300rpx;
+	}
+
 	.sub-card.is-active {
 		border-color: #2b2521;
 		box-shadow: 0 14rpx 26rpx rgba(37, 30, 25, 0.14);
@@ -276,10 +301,18 @@
 
 	.sub-thumb {
 		width: 100%;
-		aspect-ratio: 3 / 4;
-		height: 200rpx;
 		border-radius: 14rpx;
 		background: #f3f3f3;
+	}
+
+	.sub-thumb.ratio-portrait {
+		aspect-ratio: 2 / 3;
+		height: auto;
+	}
+
+	.sub-thumb.ratio-landscape {
+		aspect-ratio: 3 / 2;
+		height: auto;
 	}
 
 	.tip-section {
@@ -338,3 +371,5 @@
 		box-shadow: none;
 	}
 </style>
+
+

@@ -48,28 +48,17 @@
                     <div class="form-item-tip">积分有效期（天数），0表示永久有效</div>
                 </el-form-item>
 
-                <el-divider>生成模式倍率配置</el-divider>
+                <el-divider>生成消耗配置</el-divider>
 
-                <el-form-item label="梦幻模式倍率" prop="mode1_rate">
+                <el-form-item label="高清单次消耗" prop="hd_generate_cost">
                     <el-input-number
-                        v-model="state.form.mode1_rate"
-                        :min="0.1"
-                        :max="10"
-                        :step="0.1"
+                        v-model="state.form.hd_generate_cost"
+                        :min="1"
+                        :max="1000"
+                        :step="1"
                         controls-position="right"
                     />
-                    <div class="form-item-tip">梦幻模式积分倍率（基础消耗 × 倍率）</div>
-                </el-form-item>
-
-                <el-form-item label="专业模式倍率" prop="mode2_rate">
-                    <el-input-number
-                        v-model="state.form.mode2_rate"
-                        :min="0.1"
-                        :max="10"
-                        :step="0.1"
-                        controls-position="right"
-                    />
-                    <div class="form-item-tip">专业模式积分倍率（基础消耗 × 倍率）</div>
+                    <div class="form-item-tip">每次点击高清功能消耗的积分</div>
                 </el-form-item>
 
                 <el-form-item>
@@ -98,14 +87,14 @@ const state = reactive({
     form: {
         recharge_ratio: 10,
         generate_cost: 10,
+        hd_generate_cost: 20,
         score_expire_days: 0,
-        mode1_rate: 1,
-        mode2_rate: 2,
     },
     originalForm: {} as any,
     rules: {
         recharge_ratio: [{ required: true, message: '请输入充值比例', trigger: 'blur' }],
         generate_cost: [{ required: true, message: '请输入生成消耗', trigger: 'blur' }],
+        hd_generate_cost: [{ required: true, message: '请输入高清消耗', trigger: 'blur' }],
         score_expire_days: [{ required: true, message: '请输入积分有效期', trigger: 'blur' }],
     } as FormRules,
 })
@@ -123,9 +112,8 @@ const getConfig = async () => {
             const configs = res.data.configs
             state.form.recharge_ratio = parseInt(configs.recharge_ratio?.value || '10')
             state.form.generate_cost = parseInt(configs.generate_cost?.value || '10')
+            state.form.hd_generate_cost = parseInt(configs.hd_generate_cost?.value || '20')
             state.form.score_expire_days = parseInt(configs.score_expire_days?.value || '0')
-            state.form.mode1_rate = parseFloat(configs.mode1_rate?.value || '1')
-            state.form.mode2_rate = parseFloat(configs.mode2_rate?.value || '2')
 
             // 艹，保存原始数据用于重置
             state.originalForm = { ...state.form }

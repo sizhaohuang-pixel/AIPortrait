@@ -633,8 +633,7 @@ class Score extends Frontend
     public function config(): void
     {
         $generateCost = intval(ScoreConfig::getConfigValue('generate_cost', 10));
-        $mode1Rate = floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
-        $mode2Rate = floatval(ScoreConfig::getConfigValue('mode2_rate', 2));
+        $hdGenerateCost = intval(ScoreConfig::getConfigValue('hd_generate_cost', 20));
 
         // 艹，增加分享文案配置
         $shareFriendTitle = ScoreConfig::getConfigValue('share_friend_title', '快来看看我的AI写真！这一张真的绝了~');
@@ -643,24 +642,26 @@ class Score extends Frontend
         $homeShareTimelineTitle = ScoreConfig::getConfigValue('home_share_timeline_title', 'AI写真：一键生成你的艺术大片');
         $discoveryShareTitle = ScoreConfig::getConfigValue('discovery_share_title', '发现更多惊艳的AI写真作品');
         $noteDetailShareTitle = ScoreConfig::getConfigValue('note_detail_share_title', '这张AI写真真的绝了，快来看看！');
+        $serviceCorpId = ScoreConfig::getConfigValue('service_corp_id', '');
+        $serviceChatUrl = ScoreConfig::getConfigValue('service_chat_url', '');
 
         $imageCount = 4;
-        $mode1Cost = intval($generateCost * $imageCount * $mode1Rate);
-        $mode2Cost = intval($generateCost * $imageCount * $mode2Rate);
+        $mode1Cost = intval($generateCost * $imageCount);
 
         $this->success('获取成功', [
             'generate_cost' => $generateCost,
+            'hd_generate_cost' => $hdGenerateCost,
             'image_count' => $imageCount,
-            'mode1_rate' => $mode1Rate,
-            'mode2_rate' => $mode2Rate,
             'mode1_cost' => $mode1Cost,
-            'mode2_cost' => $mode2Cost,
+            'hd_cost' => $hdGenerateCost,
             'share_friend_title' => $shareFriendTitle,
             'share_timeline_title' => $shareTimelineTitle,
             'home_share_friend_title' => $homeShareFriendTitle,
             'home_share_timeline_title' => $homeShareTimelineTitle,
             'discovery_share_title' => $discoveryShareTitle,
             'note_detail_share_title' => $noteDetailShareTitle,
+            'service_corp_id' => $serviceCorpId,
+            'service_chat_url' => $serviceChatUrl,
         ]);
     }
 }

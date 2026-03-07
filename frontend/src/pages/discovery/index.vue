@@ -15,7 +15,7 @@
 		<view class="list-container" v-if="list.length > 0">
 			<view class="column">
 				<view v-for="item in leftList" :key="item.id" class="card" @tap="goDetail(item.id)">
-					<image class="cover" :src="item.image_url" mode="widthFix" lazy-load></image>
+					<image :class="['cover', getRatioClass(item.image_ratio)]" :src="item.image_url" mode="aspectFill" lazy-load></image>
 					<view class="info">
 						<text class="content">{{ item.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
@@ -39,7 +39,7 @@
 			</view>
 			<view class="column">
 				<view v-for="item in rightList" :key="item.id" class="card" @tap="goDetail(item.id)">
-					<image class="cover" :src="item.image_url" mode="widthFix" lazy-load></image>
+					<image :class="['cover', getRatioClass(item.image_ratio)]" :src="item.image_url" mode="aspectFill" lazy-load></image>
 					<view class="info">
 						<text class="content">{{ item.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
@@ -63,21 +63,29 @@
 			</view>
 		</view>
 
-		<view v-if="loading && list.length === 0" class="loading-state">加载中...</view>
+		<view v-if="loading && list.length === 0" class="loading-state">
+			<view class="loading-spinner"></view>
+			<text class="loading-text">加载中...</text>
+		</view>
 		<view v-if="!loading && list.length === 0" class="empty-state">
 			<view class="empty-icon"></view>
 			<text class="empty-text">{{ my ? '你还没有发布过笔记呢' : '暂无发现，快去生成你的作品吧！' }}</text>
 			<button class="go-home-btn" @tap="goHome">去首页看看</button>
 		</view>
 		<view v-if="finished && list.length > 0" class="no-more">没有更多了</view>
+		<floating-service-button :show-signal="serviceSignal" :bottom-offset-upx="150" />
 	</view>
 </template>
 
 <script>
+	import FloatingServiceButton from '../../components/floating-service-button.vue'
 	import { get } from '../../services/request.js'
 	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
+		components: {
+			'floating-service-button': FloatingServiceButton
+		},
 		data() {
 			return {
 				type: 'new',
@@ -88,6 +96,9 @@
 				finished: false,
 				leftList: [],
 				rightList: [],
+				leftHeight: 0,
+				rightHeight: 0,
+				serviceSignal: 0,
 				shareConfig: {
 					discovery_share_title: '发现更多惊艳的AI写真作品'
 				}
@@ -104,6 +115,7 @@
 		},
 		onShow() {
 			console.log('Discovery Page onShow');
+			this.serviceSignal++;
 			this.refresh();
 		},
 		onPullDownRefresh() {
@@ -139,6 +151,8 @@
 				this.list = [];
 				this.leftList = [];
 				this.rightList = [];
+				this.leftHeight = 0;
+				this.rightHeight = 0;
 				this.finished = false;
 				this.loadList();
 			},
@@ -154,7 +168,10 @@
 						limit: 10
 					});
 					console.log('API Response:', res);
-					const newList = res.list || [];
+					const newList = (res.list || []).map((item) => ({
+						...item,
+						image_ratio: this.normalizeRatio(item.image_ratio)
+					}));
 					if (newList.length < 10) {
 						this.finished = true;
 					}
@@ -180,13 +197,33 @@
 			},
 			distributeList(newList) {
 				newList.forEach((item) => {
-					// 简单的瀑布流分配
-					if (this.leftList.length <= this.rightList.length) {
+					const cardHeight = this.estimateCardHeight(item)
+					// 真瀑布流：按当前列累计高度分配
+					if (this.leftHeight <= this.rightHeight) {
 						this.leftList.push(item);
+						this.leftHeight += cardHeight
 					} else {
 						this.rightList.push(item);
+						this.rightHeight += cardHeight
 					}
 				});
+			},
+			estimateCardHeight(item) {
+				// 列宽 345rpx，图片按 ratio 计算高度，再加上信息区/间距高度
+				const width = 345
+				const isLandscape = this.normalizeRatio(item && item.image_ratio) === '3:2'
+				const imageHeight = isLandscape ? Math.round((width * 2) / 3) : Math.round((width * 3) / 2)
+				const content = (item && item.content ? String(item.content) : '')
+				const textExtra = content.length > 20 ? 24 : 0
+				const infoHeight = 120 + textExtra
+				const cardGap = 20
+				return imageHeight + infoHeight + cardGap
+			},
+			normalizeRatio(ratio) {
+				return ratio === '3:2' ? '3:2' : '2:3'
+			},
+			getRatioClass(ratio) {
+				return this.normalizeRatio(ratio) === '3:2' ? 'ratio-landscape' : 'ratio-portrait'
 			},
 			switchType(type) {
 				if (this.type === type) return;
@@ -296,11 +333,24 @@
 		to { opacity: 1; transform: translateY(0); }
 	}
 
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
+
 	.cover {
 		width: 100%;
 		height: auto;
 		display: block;
 		background: #eee;
+	}
+
+	.cover.ratio-portrait {
+		aspect-ratio: 2 / 3;
+	}
+
+	.cover.ratio-landscape {
+		aspect-ratio: 3 / 2;
 	}
 
 	.info {
@@ -380,6 +430,30 @@
 		color: #999;
 	}
 
+	.loading-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 140rpx 0 100rpx;
+	}
+
+	.loading-spinner {
+		width: 52rpx;
+		height: 52rpx;
+		border-radius: 50%;
+		border: 4rpx solid #ebe7e3;
+		border-top-color: #2b2521;
+		animation: spin 0.8s linear infinite;
+	}
+
+	.loading-text {
+		margin-top: 18rpx;
+		font-size: 24rpx;
+		color: #8f8781;
+		letter-spacing: 1rpx;
+	}
+
 	.empty-state {
 		display: flex;
 		flex-direction: column;
@@ -434,3 +508,5 @@
 	.no-more::before { left: 200rpx; }
 	.no-more::after { right: 200rpx; }
 </style>
+
+

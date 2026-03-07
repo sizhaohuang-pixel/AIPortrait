@@ -3,7 +3,7 @@
 		<view class="list-container" v-if="list.length > 0">
 			<view class="column">
 				<view v-for="item in leftList" :key="item.id" class="card" @tap="goDetail(item.note.id)">
-					<image class="cover" :src="item.note.image_url" mode="widthFix" lazy-load></image>
+					<image :class="['cover', getRatioClass(item.note.image_ratio)]" :src="item.note.image_url" mode="aspectFill" lazy-load></image>
 					<view class="info">
 						<text class="content">{{ item.note.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
@@ -21,7 +21,7 @@
 			</view>
 			<view class="column">
 				<view v-for="item in rightList" :key="item.id" class="card" @tap="goDetail(item.note.id)">
-					<image class="cover" :src="item.note.image_url" mode="widthFix" lazy-load></image>
+					<image :class="['cover', getRatioClass(item.note.image_ratio)]" :src="item.note.image_url" mode="aspectFill" lazy-load></image>
 					<view class="info">
 						<text class="content">{{ item.note.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
@@ -101,7 +101,13 @@
 						page: this.page,
 						limit: 10
 					})
-					const newList = res.list || []
+					const newList = (res.list || []).map((item) => ({
+						...item,
+						note: {
+							...(item.note || {}),
+							image_ratio: this.normalizeRatio(item.note && item.note.image_ratio)
+						}
+					}))
 					if (newList.length < 10) {
 						this.finished = true
 					}
@@ -123,6 +129,12 @@
 						this.rightList.push(item)
 					}
 				})
+			},
+			normalizeRatio(ratio) {
+				return ratio === '3:2' ? '3:2' : '2:3'
+			},
+			getRatioClass(ratio) {
+				return this.normalizeRatio(ratio) === '3:2' ? 'ratio-landscape' : 'ratio-portrait'
 			},
 			goDetail(id) {
 				uni.navigateTo({ url: `/pages/discovery/detail?id=${id}` })
@@ -162,6 +174,14 @@
 		height: auto;
 		display: block;
 		background: #eee;
+	}
+
+	.cover.ratio-portrait {
+		aspect-ratio: 2 / 3;
+	}
+
+	.cover.ratio-landscape {
+		aspect-ratio: 3 / 2;
 	}
 
 	.info {

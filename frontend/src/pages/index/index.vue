@@ -63,13 +63,13 @@
 				<view class="section">
 					<view class="section-title">精选模板</view>
 					<view v-if="templates.length > 0" class="grid">
-						<view
-							v-for="item in templates"
-							:key="item.id"
-							class="card"
-							@tap="goDetail(item.id)"
-						>
-							<image class="card-cover" :src="formattedUrl(item.cover_url)" mode="aspectFill" lazy-load></image>
+							<view
+								v-for="item in templates"
+								:key="item.id"
+								:class="['card', item.cover_ratio === '3:2' ? 'landscape-wide' : '']"
+								@tap="goDetail(item.id)"
+							>
+								<image :class="['card-cover', getRatioClass(item.cover_ratio)]" :src="formattedUrl(item.cover_url)" mode="aspectFill" lazy-load></image>
 							<view class="card-body">
 								<view class="card-title">{{ item.title }}</view>
 								<view class="card-tags">
@@ -85,17 +85,26 @@
 				</view>
 			</view>
 		</scroll-view>
+
+		<floating-service-button
+			:show-signal="serviceSignal"
+			:bottom-offset-upx="150"
+			:corp-id="serviceChatConfig.corpId"
+			:service-url="serviceChatConfig.url"
+		/>
 	</view>
 </template>
 
 <script>
 	import SkeletonLoader from '../../components/SkeletonLoader.vue'
+	import FloatingServiceButton from '../../components/floating-service-button.vue'
 	import { get } from '../../services/request.js'
 	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
 		components: {
-			SkeletonLoader
+			SkeletonLoader,
+			'floating-service-button': FloatingServiceButton
 		},
 		data() {
 			return {
@@ -111,6 +120,11 @@
 				styles: [],
 				templates: [],
 				banners: [],
+				serviceSignal: 0,
+				serviceChatConfig: {
+					corpId: '',
+					url: ''
+				},
 				shareConfig: {
 					home_share_friend_title: '这款AI写真小程序太好玩了，快来试试！',
 					home_share_timeline_title: 'AI写真：一键生成你的艺术大片'
@@ -122,6 +136,9 @@
 			this.loadData()
 			// 艹，加载分享配置
 			this.loadShareConfig()
+		},
+		onShow() {
+			this.serviceSignal++
 		},
 		computed: {
 			currentFilterName() {
@@ -186,7 +203,7 @@
 				})
 			}
 		},
-		methods: {
+			methods: {
 			captureInviterId(query = {}) {
 				let inviterId = Number(query.inviter_id || 0)
 				const scene = query.scene ? decodeURIComponent(query.scene) : ''
@@ -203,14 +220,23 @@
 					uni.setStorageSync('pending_inviter_id', inviterId)
 				}
 			},
-			formattedUrl(url) {
-				if (!url) return ''
-				if (url.startsWith('http')) return url
-				const base = API_CONFIG.baseURL.replace(/\/+$/, '')
-				const path = url.startsWith('/') ? url : '/' + url
-				return base + path
-			},
-			// 加载数据
+				formattedUrl(url) {
+					if (!url) return ''
+					if (url.startsWith('http')) return url
+					const base = API_CONFIG.baseURL.replace(/\/+$/, '')
+					const path = url.startsWith('/') ? url : '/' + url
+					return base + path
+				},
+				getRatioClass(ratio) {
+					return ratio === '3:2' ? 'ratio-landscape' : 'ratio-portrait'
+				},
+				enrichTemplateRatios(list = []) {
+					return (list || []).map(item => ({
+						...item,
+						cover_ratio: item.cover_ratio === '3:2' ? '3:2' : '2:3'
+					}))
+				},
+				// 加载数据
 			async loadData() {
 				try {
 					this.loading = true
@@ -220,8 +246,8 @@
 						get('/api/banner/list')
 					])
 					this.styles = stylesRes.styles || []
-					this.templates = templatesRes.templates || []
-					this.banners = bannersRes.list || []
+						this.templates = this.enrichTemplateRatios(templatesRes.templates || [])
+						this.banners = bannersRes.list || []
 				} catch (error) {
 					console.error('加载数据失败：', error)
 					uni.showToast({ title: '加载失败', icon: 'none' })
@@ -244,8 +270,8 @@
 						this.fetchTemplates(),
 						get('/api/banner/list')
 					])
-					this.templates = templatesRes.templates || []
-					this.banners = bannersRes.list || []
+						this.templates = this.enrichTemplateRatios(templatesRes.templates || [])
+						this.banners = bannersRes.list || []
 				} catch (error) {
 					console.error('刷新失败：', error)
 				} finally {
@@ -277,11 +303,11 @@
 				this.closeFilter()
 				uni.showLoading({ title: '加载中' })
 				try {
-					const res = await this.fetchTemplates()
-					this.templates = res.templates || []
-				} finally {
-					uni.hideLoading()
-				}
+						const res = await this.fetchTemplates()
+						this.templates = this.enrichTemplateRatios(res.templates || [])
+					} finally {
+						uni.hideLoading()
+					}
 			},
 			handleBannerClick(banner) {
 				uni.navigateTo({ url: `/pages/banner-detail/index?id=${banner.id}` })
@@ -300,6 +326,10 @@
 						this.shareConfig = {
 							home_share_friend_title: res.data.data.home_share_friend_title,
 							home_share_timeline_title: res.data.data.home_share_timeline_title
+						}
+						this.serviceChatConfig = {
+							corpId: res.data.data.service_corp_id || '',
+							url: res.data.data.service_chat_url || ''
 						}
 					}
 				} catch (e) {
@@ -443,10 +473,23 @@
 		animation: rise 0.4s ease-out;
 	}
 
+	.card.landscape-wide {
+		grid-column: span 2;
+	}
+
 	.card-cover {
 		width: 100%;
-		height: 440rpx;
 		background: #f3f3f3;
+	}
+
+	.card-cover.ratio-portrait {
+		aspect-ratio: 2 / 3;
+		height: auto;
+	}
+
+	.card-cover.ratio-landscape {
+		aspect-ratio: 3 / 2;
+		height: auto;
 	}
 
 	.card-body {
@@ -581,4 +624,7 @@
 		color: #999;
 		font-size: 24rpx;
 	}
+
 </style>
+
+

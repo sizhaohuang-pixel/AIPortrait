@@ -9,9 +9,9 @@
 			</view>
 		</view>
 
-		<view class="hero-card">
-			<image class="hero-cover" :src="resultUrl" mode="aspectFill" @tap="openPreview"></image>
-		</view>
+			<view class="hero-card">
+				<image :class="['hero-cover', getRatioClass(imageRatio)]" :src="resultUrl" mode="aspectFill" @tap="openPreview"></image>
+			</view>
 
 		<view class="bottom-bar">
 			<button class="primary-btn" @tap="goToHome">
@@ -36,13 +36,14 @@
 
 	export default {
 		data() {
-			return {
-				shareCode: '',
-				targetIndex: 0, // 艹，好友要看的那张索引
-				resultUrl: '',  // 艹，只存那一张图
-				owner: null,
-				loading: true
-			}
+				return {
+					shareCode: '',
+					targetIndex: 0, // 艹，好友要看的那张索引
+					resultUrl: '',  // 艹，只存那一张图
+					imageRatio: '2:3',
+					owner: null,
+					loading: true
+				}
 		},
 		onLoad(query) {
 			const inviterId = Number(query.inviter_id || 0)
@@ -72,12 +73,13 @@
 					uni.showLoading({ title: '加载作品中...' })
 					const res = await get(API_PATHS.portrait.share, { code: this.shareCode }, { needToken: false })
 
-					if (res && res.results) {
-						this.owner = res.owner
-						// 艹，只取出选中的那一张图
-						const sharedList = res.results.map(item => item.result_url)
-						this.resultUrl = sharedList[this.targetIndex] || sharedList[0]
-					} else {
+						if (res && res.results) {
+							this.owner = res.owner
+							// 艹，只取出选中的那一张图
+							const sharedList = res.results.map(item => item.result_url)
+							this.resultUrl = sharedList[this.targetIndex] || sharedList[0]
+							this.imageRatio = await this.detectImageAspectRatio(this.resultUrl)
+						} else {
 						throw new Error('作品不存在')
 					}
 				} catch (error) {
@@ -99,10 +101,30 @@
 					current: this.resultUrl
 				})
 			},
-			goToHome() {
-				uni.switchTab({ url: '/pages/index/index' })
-			}
-		},
+				goToHome() {
+					uni.switchTab({ url: '/pages/index/index' })
+				},
+				getRatioClass(ratio) {
+					return ratio === '3:2' ? 'ratio-landscape' : 'ratio-portrait'
+				},
+				detectImageAspectRatio(url) {
+					return new Promise((resolve) => {
+						if (!url) {
+							resolve('2:3')
+							return
+						}
+						uni.getImageInfo({
+							src: url,
+							success: (res) => {
+								resolve(res.width > res.height ? '3:2' : '2:3')
+							},
+							fail: () => {
+								resolve('2:3')
+							}
+						})
+					})
+				}
+			},
 
 		// 艹，分享页也要支持二次分享
 		onShareAppMessage() {
@@ -179,10 +201,18 @@
 
 	.hero-cover {
 		width: 100%;
-		aspect-ratio: 3 / 4;
-		height: 880rpx;
 		border-radius: 22rpx;
 		background: #f3f3f3;
+	}
+
+	.hero-cover.ratio-portrait {
+		aspect-ratio: 2 / 3;
+		height: 880rpx;
+	}
+
+	.hero-cover.ratio-landscape {
+		aspect-ratio: 3 / 2;
+		height: 586rpx;
 	}
 
 	.badge {

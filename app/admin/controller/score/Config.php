@@ -54,22 +54,23 @@ class Config extends Backend
                 $allowKeys = [
                     'recharge_ratio',
                     'generate_cost',
+                    'hd_generate_cost',
                     'score_expire_days',
-                    'mode1_rate',
-                    'mode2_rate',
                     'share_friend_title',
                     'share_timeline_title',
                     'home_share_friend_title',
                     'home_share_timeline_title',
                     'discovery_share_title',
-                    'note_detail_share_title'
+                    'note_detail_share_title',
+                    'service_corp_id',
+                    'service_chat_url'
                 ];
 
                 // 艹，只处理允许保存的 Key
                 foreach ($data as $key => $value) {
                     if (in_array($key, $allowKeys)) {
                         // 艹，数值类的还是得简单校验下，别特么乱传
-                        if (in_array($key, ['recharge_ratio', 'generate_cost', 'mode1_rate', 'mode2_rate'])) {
+                        if (in_array($key, ['recharge_ratio', 'generate_cost', 'hd_generate_cost'])) {
                             if (!is_numeric($value) || $value <= 0) {
                                 continue; // 艹，无效数字直接跳过，不报错也别瞎存
                             }

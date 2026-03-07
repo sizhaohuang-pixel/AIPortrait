@@ -55,30 +55,35 @@
 				<view class="clear-btn" @tap="clearAll">清空全部</view>
 			</view>
 			<view class="upload-legal-tip">
-				请确定您对上传的照片拥有合法使用权力或已取得他人合法授权
+				<text class="legal-star">*</text>请确定您对上传的照片拥有合法使用权力或已取得他人合法授权
+			</view>
+
+			<view class="notice-card">
+				<view class="notice-title">
+					<text class="notice-icon">✨</text>
+					<text>出图注意事项</text>
+				</view>
+				<view class="notice-content">
+					<text class="notice-line">
+						<text class="notice-strong">上传图片 = 图片质量。</text>
+					</text>
+					<text class="notice-line">
+						出图时会高还原本人照片的发型、脸型、五官、肤色等细节，所以选择一张好照片很重要。
+					</text>
+					<text class="notice-line">
+						请不要再低调啦，上传那张珍藏已久的美照，开启一段神奇的 AI 写真之旅吧！
+					</text>
+				</view>
 			</view>
 		</view>
 
-		<!-- 选择模式 -->
-		<view class="section">
-			<view class="section-title">选择生成模式</view>
-			<view class="mode-list">
-				<view
-					:class="['mode-card', mode === 1 ? 'is-active' : '']"
-					@tap="setMode(1)"
-				>
-					<view class="mode-name">梦幻模式</view>
-					<view class="mode-desc">更具艺术感与氛围感</view>
-					<view class="mode-cost">消耗 {{ scoreConfig.mode1_cost || 0 }} 积分</view>
+		<view class="section service-section">
+			<view class="service-card">
+				<view class="service-main">
+					<text class="service-title">想要更贴合需求的成片效果？</text>
+					<text class="service-desc">可提交你的风格偏好与使用场景，我们提供一对一人工定制服务</text>
 				</view>
-				<view
-					:class="['mode-card', mode === 2 ? 'is-active' : '']"
-					@tap="setMode(2)"
-				>
-					<view class="mode-name">专业模式</view>
-					<view class="mode-desc">写实风格，细节更出众</view>
-					<view class="mode-cost">消耗 {{ scoreConfig.mode2_cost || 0 }} 积分</view>
-				</view>
+				<view class="service-action" @tap="goCustomerService">人工定制</view>
 			</view>
 		</view>
 
@@ -102,15 +107,14 @@
 				subTemplateId: 0,
 				subTemplateName: '',
 				title: '',
-				mode: 1,  // 艹，生成模式，默认为1（梦幻）
 				maxFaceCount: 1,  // 艹，最大人脸数量，从后端获取
 				imageUrls: [],  // 本地临时路径
 				uploadedUrls: [],  // 已上传的 RunningHub URL
 				uploading: false,  // 艹，是否正在上传
 				uploadProgress: 0,  // 艹，上传进度（已上传数量）
-				scoreConfig: {
-					mode1_cost: 0,
-					mode2_cost: 0
+				serviceChatConfig: {
+					corpId: '',
+					url: ''
 				}
 			}
 		},
@@ -126,38 +130,28 @@
 			this.subTemplateName = decodeURIComponent(query.subTemplateName || '')
 			this.title = decodeURIComponent(query.title || '')
 
-			// 艹，默认选择模式1
-			this.mode = 1
-
-			// 艹，加载积分配置
-			this.loadScoreConfig()
 			// 艹，加载模板信息，获取人脸数量限制
 			this.loadTemplateInfo()
+			this.loadServiceChatConfig()
 		},
 		methods: {
-			// 艹，加载积分配置
-			async loadScoreConfig() {
+			async loadServiceChatConfig() {
 				try {
 					const res = await uni.request({
 						url: `${API_CONFIG.baseURL}/api/score/config`,
 						method: 'GET'
 					})
-					if (res.statusCode === 200 && res.data.code === 1) {
-						this.scoreConfig = {
-							mode1_cost: res.data.data.mode1_cost || 0,
-							mode2_cost: res.data.data.mode2_cost || 0
+					if (res.statusCode === 200 && res.data && res.data.code === 1) {
+						const data = res.data.data || {}
+						this.serviceChatConfig = {
+							corpId: data.service_corp_id || '',
+							url: data.service_chat_url || ''
 						}
 					}
-				} catch (error) {
-					console.error('加载积分配置失败：', error)
+				} catch (e) {
+					console.error('加载客服配置失败：', e)
 				}
 			},
-
-			// 艹，设置生成模式
-			setMode(m) {
-				this.mode = m
-			},
-
 			// 艹，加载模板信息
 			async loadTemplateInfo() {
 				try {
@@ -334,12 +328,11 @@
 					})
 
 					// 艹，直接使用已上传的 RunningHub URL
-					const data = await generatePortrait({
-						template_id: this.templateId,
-						sub_template_id: this.subTemplateId,
-						images: this.uploadedUrls,  // 艹，使用已上传的 RunningHub URL
-						mode: this.mode
-					})
+						const data = await generatePortrait({
+							template_id: this.templateId,
+							sub_template_id: this.subTemplateId,
+							images: this.uploadedUrls  // 艹，使用已上传的 RunningHub URL
+						})
 
 					uni.hideLoading()
 
@@ -378,6 +371,32 @@
 				} finally {
 					this.uploading = false
 				}
+			},
+			goCustomerService() {
+				// #ifdef MP-WEIXIN
+				const corpId = (this.serviceChatConfig.corpId || '').trim()
+				const url = (this.serviceChatConfig.url || '').trim()
+				if (corpId && url) {
+					try {
+						wx.openCustomerServiceChat({
+							extInfo: { url },
+							corpId,
+							fail: (err) => {
+								console.error('openCustomerServiceChat fail:', err)
+								uni.navigateTo({
+									url: '/pages/agreement/index?type=custom'
+								})
+							}
+						})
+						return
+					} catch (e) {
+						console.error('openCustomerServiceChat exception:', e)
+					}
+				}
+				// #endif
+				uni.navigateTo({
+					url: '/pages/agreement/index?type=custom'
+				})
 			}
 		}
 	}
@@ -570,54 +589,104 @@
 		font-size: 22rpx;
 		line-height: 1.5;
 		color: #8f6e5f;
-	}
-
-	/* 模式选择样式 */
-	.mode-list {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 20rpx;
-		margin-top: 10rpx;
-	}
-
-	.mode-card {
-		background: #ffffff;
-		border-radius: 20rpx;
-		padding: 24rpx 20rpx;
-		border: 2rpx solid #f0e6df;
 		text-align: center;
-		transition: all 0.3s;
-		box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.02);
 	}
 
-	.mode-card.is-active {
-		border-color: #2b2521;
-		background: linear-gradient(135deg, #fffcf9 0%, #ffffff 100%);
-		box-shadow: 0 10rpx 24rpx rgba(37, 30, 25, 0.08);
-		transform: translateY(-2rpx);
-	}
-
-	.mode-name {
-		font-size: 28rpx;
+	.legal-star {
+		color: #e85a4f;
 		font-weight: 700;
+		margin-right: 6rpx;
+	}
+
+	.notice-card {
+		margin-top: 18rpx;
+		padding: 20rpx 22rpx;
+		border-radius: 18rpx;
+		background: linear-gradient(145deg, #fff7ec 0%, #fff1e2 100%);
+		border: 1rpx solid #f0ddc5;
+		box-shadow: 0 8rpx 18rpx rgba(37, 30, 25, 0.08);
+	}
+
+	.notice-title {
+		display: flex;
+		align-items: center;
+		gap: 8rpx;
+		font-size: 26rpx;
+		font-weight: 700;
+		color: #7a4f35;
+	}
+
+	.notice-icon {
+		font-size: 24rpx;
+		line-height: 1;
+	}
+
+	.notice-content {
+		margin-top: 10rpx;
+		display: flex;
+		flex-direction: column;
+		gap: 8rpx;
+	}
+
+	.notice-line {
+		font-size: 22rpx;
+		line-height: 1.6;
+		color: #6f5c50;
+	}
+
+	.notice-strong {
+		color: #9a5a4d;
+		font-weight: 700;
+	}
+
+	.service-section {
+		padding-top: 2rpx;
+	}
+
+	.service-card {
+		background: #ffffff;
+		border-radius: 22rpx;
+		border: 2rpx solid #f0e6df;
+		padding: 24rpx;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 20rpx;
+	}
+
+	.service-main {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.service-title {
+		display: block;
+		font-size: 26rpx;
+		font-weight: 600;
 		color: #2b2521;
 	}
 
-	.mode-desc {
+	.service-desc {
+		display: block;
 		margin-top: 8rpx;
 		font-size: 22rpx;
-		color: #9a8f88;
+		color: #8f8781;
 		line-height: 1.4;
 	}
 
-	.mode-cost {
-		margin-top: 16rpx;
+	.service-action {
+		flex-shrink: 0;
+		height: 62rpx;
+		line-height: 62rpx;
+		padding: 0 24rpx;
+		border-radius: 999rpx;
+		border: 2rpx solid #2b2521;
+		color: #2b2521;
 		font-size: 24rpx;
-		font-weight: 700;
-		color: #8b5a2b;
+		font-weight: 600;
 	}
 
-	.footer {
+		.footer {
 		position: fixed;
 		left: 0;
 		right: 0;

@@ -15,11 +15,20 @@
 					<view class="package-amount">¥{{ item.amount }}</view>
 					<view class="package-score">
 						{{ item.score }}积分
-						<text v-if="item.bonus_score > 0" class="package-bonus">+{{ item.bonus_score }}</text>
+						<text v-if="item.bonus_score > 0" class="package-bonus">+赠{{ item.bonus_score }}</text>
 					</view>
 					<view v-if="selectedPackage && selectedPackage.id === item.id" class="package-check">✓</view>
 				</view>
 			</view>
+		</view>
+
+		<!-- 艹，客服入口 -->
+		<view class="service-card">
+			<view class="service-main">
+				<text class="service-title">想拿更多充值优惠？</text>
+				<text class="service-desc">联系客服获取限时活动与专属优惠方案，充值更划算</text>
+			</view>
+			<view class="service-action" @tap="goCustomerService">获取优惠</view>
 		</view>
 
 		<!-- 艹，充值按钮 -->
@@ -52,6 +61,28 @@
 			this.getPackages()
 		},
 		methods: {
+			async openEnterpriseService() {
+				try {
+					const cfg = await get('/api/score/config')
+					const corpId = String(cfg.service_corp_id || '').trim()
+					const url = String(cfg.service_chat_url || '').trim()
+					if (!corpId || !url) return false
+					// #ifdef MP-WEIXIN
+					wx.openCustomerServiceChat({
+						extInfo: { url },
+						corpId,
+						fail: (err) => {
+							console.error('openCustomerServiceChat fail:', err)
+							uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
+						}
+					})
+					return true
+					// #endif
+				} catch (error) {
+					console.error('获取客服配置失败:', error)
+				}
+				return false
+			},
 			// 艹，获取充值档位列表
 			async getPackages() {
 				try {
@@ -193,6 +224,15 @@
 				}
 
 				throw new Error('支付结果确认超时，请稍后在充值记录中查看')
+			},
+
+			async goCustomerService() {
+				const opened = await this.openEnterpriseService()
+				if (!opened) {
+					uni.navigateTo({
+						url: '/pages/agreement/index?type=custom'
+					})
+				}
 			}
 		}
 	}
@@ -279,6 +319,50 @@
 		justify-content: center;
 		font-size: 20rpx;
 		font-weight: 700;
+	}
+
+	.service-card {
+		margin-top: 18rpx;
+		background: #ffffff;
+		border-radius: 22rpx;
+		border: 2rpx solid #f0e6df;
+		padding: 24rpx;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 20rpx;
+	}
+
+	.service-main {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.service-title {
+		display: block;
+		font-size: 26rpx;
+		font-weight: 600;
+		color: #2b2521;
+	}
+
+	.service-desc {
+		display: block;
+		margin-top: 8rpx;
+		font-size: 22rpx;
+		color: #8f8781;
+		line-height: 1.4;
+	}
+
+	.service-action {
+		flex-shrink: 0;
+		height: 62rpx;
+		line-height: 62rpx;
+		padding: 0 24rpx;
+		border-radius: 999rpx;
+		border: 2rpx solid #2b2521;
+		color: #2b2521;
+		font-size: 24rpx;
+		font-weight: 600;
 	}
 
 	/* 艹，充值按钮 */

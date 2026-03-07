@@ -86,6 +86,15 @@ export function deleteResultImage(id) {
 	return post(API_PATHS.portrait.deleteResult, { id })
 }
 
+/**
+ * 提交高清生成任务
+ * @param {Number} id 当前结果图ID
+ * @returns {Promise}
+ */
+export function generateHdImage(id) {
+	return post(API_PATHS.portrait.hdEnhance, { id })
+}
+
 export default {
 	getStyles,
 	getTemplates,
@@ -94,5 +103,6 @@ export default {
 	getTaskProgress,
 	getHistory,
 	deleteHistory,
-	deleteResultImage
+	deleteResultImage,
+	generateHdImage
 }

@@ -25,8 +25,8 @@
                         </el-tag>
                     </el-descriptions-item>
                     <el-descriptions-item label="模式">
-                        <el-tag :type="baTable.form.items.mode === 1 ? 'primary' : 'success'">
-                            {{ baTable.form.items.mode === 1 ? '梦幻模式' : '专业模式' }}
+                        <el-tag :type="modeTagType">
+                            {{ modeText }}
                         </el-tag>
                     </el-descriptions-item>
                     <el-descriptions-item label="进度">
@@ -95,6 +95,22 @@ const successResults = computed(() => {
         return []
     }
     return baTable.form.items.results.filter((r: any) => r.status === 1)
+})
+
+const modeText = computed(() => {
+    const items = baTable.form.items || {}
+    if (String(items.share_code || '').startsWith('hd_') || Number(items.mode) === 2) {
+        return '高清模式'
+    }
+    return '梦幻模式'
+})
+
+const modeTagType = computed(() => {
+    const items = baTable.form.items || {}
+    if (String(items.share_code || '').startsWith('hd_') || Number(items.mode) === 2) {
+        return 'warning'
+    }
+    return 'primary'
 })
 </script>
 

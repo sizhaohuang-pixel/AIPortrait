@@ -413,6 +413,7 @@ class User extends Frontend
         foreach ($list as &$item) {
             if (isset($item['note'])) {
                 $item['note']['image_url'] = $this->convertImageUrl($item['note']['image_url']);
+                $item['note']['image_ratio'] = $this->detectAspectRatioByImageUrl($item['note']['image_url']);
                 if (empty($item['note']['user']) || !is_array($item['note']['user'])) {
                     $item['note']['user'] = [
                         'id' => 0,
@@ -450,6 +451,7 @@ class User extends Frontend
         foreach ($list as &$item) {
             if (isset($item['note'])) {
                 $item['note']['image_url'] = $this->convertImageUrl($item['note']['image_url']);
+                $item['note']['image_ratio'] = $this->detectAspectRatioByImageUrl($item['note']['image_url']);
                 if (empty($item['note']['user']) || !is_array($item['note']['user'])) {
                     $item['note']['user'] = [
                         'id' => 0,
@@ -526,6 +528,37 @@ class User extends Frontend
         }
 
         $this->success('', ['list' => $list]);
+    }
+
+    /**
+     * 根据图片地址判断比例：横图 3:2，竖图 2:3
+     */
+    private function detectAspectRatioByImageUrl($url): string
+    {
+        try {
+            $u = trim(strval($url));
+            if ($u === '') return '2:3';
+
+            if (str_starts_with($u, 'http://') || str_starts_with($u, 'https://')) {
+                $context = stream_context_create([
+                    'http' => ['timeout' => 5],
+                    'https' => ['timeout' => 5],
+                ]);
+                $binary = @file_get_contents($u, false, $context);
+                if ($binary === false || $binary === '') return '2:3';
+                $size = @getimagesizefromstring($binary);
+                if (!is_array($size) || empty($size[0]) || empty($size[1])) return '2:3';
+                return intval($size[0]) > intval($size[1]) ? '3:2' : '2:3';
+            }
+
+            $localPath = public_path() . ltrim($u, '/');
+            if (!is_file($localPath)) return '2:3';
+            $size = @getimagesize($localPath);
+            if (!is_array($size) || empty($size[0]) || empty($size[1])) return '2:3';
+            return intval($size[0]) > intval($size[1]) ? '3:2' : '2:3';
+        } catch (\Throwable $e) {
+            return '2:3';
+        }
     }
 
     /**

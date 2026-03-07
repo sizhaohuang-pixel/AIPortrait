@@ -13,6 +13,14 @@ use GuzzleHttp\Promise;
 class AiService
 {
     /**
+     * seedream-v5-lite 尺寸边界
+     */
+    protected const SEEDREAM_WIDTH_MIN = 1600;
+    protected const SEEDREAM_WIDTH_MAX = 4704;
+    protected const SEEDREAM_HEIGHT_MIN = 1344;
+    protected const SEEDREAM_HEIGHT_MAX = 4096;
+
+    /**
      * API地址 - 模式1（梦幻）
      * 艹，seedream-v5-lite 接口
      * @var string
@@ -246,7 +254,7 @@ class AiService
      * @param int $mode 生成模式（1=梦幻，2=专业）
      * @return array ['success' => bool, 'task_id' => string, 'error' => string]
      */
-    public function generateImage($prompt, $imageUrls, $mode = 1)
+    public function generateImage($prompt, $imageUrls, $mode = 1, $aspectRatio = '2:3')
     {
         // 艹，检查API Key
         if (empty($this->apiKey)) {
@@ -258,14 +266,6 @@ class AiService
         }
 
         // 艹，检查参数
-        if (empty($prompt)) {
-            return [
-                'success' => false,
-                'task_id' => '',
-                'error' => '提示词不能为空',
-            ];
-        }
-
         if (empty($imageUrls) || !is_array($imageUrls)) {
             return [
                 'success' => false,
@@ -274,23 +274,34 @@ class AiService
             ];
         }
 
+        // 艹，模式1需要传入原始提示词；模式2只读 Mode2 配置
+        if ($mode != 2 && empty($prompt)) {
+            return [
+                'success' => false,
+                'task_id' => '',
+                'error' => '提示词不能为空',
+            ];
+        }
+
+        $aspectRatio = $this->normalizeAspectRatio($aspectRatio);
+
         // 艹，根据模式选择API地址和构建请求数据
         if ($mode == 2) {
-            // 艹，模式2：专业模式（rhart-image-n-pro）
-            // 艹，从系统配置中读取模式2的关键词
-            $faceKeywords = get_sys_config('Mode2');
-            if (!empty($faceKeywords)) {
-                $enhancedPrompt = $faceKeywords . ', ' . $prompt;
-            } else {
-                // 艹，如果配置为空，使用原始 prompt
-                $enhancedPrompt = $prompt;
+            // 艹，模式2：只使用 Mode2 配置，不拼接其他提示词
+            $enhancedPrompt = trim((string)get_sys_config('Mode2'));
+            if ($enhancedPrompt === '') {
+                return [
+                    'success' => false,
+                    'task_id' => '',
+                    'error' => 'Mode2 配置为空',
+                ];
             }
 
             $this->apiUrl = $this->apiUrlMode2;
             $data = [
                 'prompt' => $enhancedPrompt,
                 'imageUrls' => $imageUrls,
-                'aspectRatio' => '3:4',  // 艹，固定使用3:4比例
+                'aspectRatio' => $aspectRatio,
                 'resolution' => '4k',     // 艹，使用4k分辨率
             ];
         } else {
@@ -304,7 +315,7 @@ class AiService
                 $enhancedPrompt = $prompt;
             }
 
-            $seedreamPayload = $this->buildSeedreamV5Payload($enhancedPrompt, $imageUrls);
+            $seedreamPayload = $this->buildSeedreamV5Payload($enhancedPrompt, $imageUrls, $aspectRatio);
             if (!$seedreamPayload['success']) {
                 return [
                     'success' => false,
@@ -522,7 +533,7 @@ class AiService
      * @param int $mode 生成模式（1=梦幻，2=专业）
      * @return array 结果数组 [['success' => bool, 'task_id' => string, 'error' => string], ...]
      */
-    public function generateImageBatch($prompt, $imageUrls, $count = 4, $mode = 1)
+    public function generateImageBatch($prompt, $imageUrls, $count = 4, $mode = 1, $aspectRatio = '2:3')
     {
         // 艹，检查API Key
         if (empty($this->apiKey)) {
@@ -534,9 +545,9 @@ class AiService
             ]);
         }
 
-        // 艹，检查参数
-        if (empty($prompt) || empty($imageUrls)) {
-            $error = empty($prompt) ? '提示词不能为空' : '人脸图片URL不能为空';
+        // 艹，检查参数：模式1要求 prompt；模式2不要求
+        if (empty($imageUrls)) {
+            $error = '人脸图片URL不能为空';
             return array_fill(0, $count, [
                 'success' => false,
                 'task_id' => '',
@@ -544,25 +555,38 @@ class AiService
             ]);
         }
 
+        if ($mode != 2 && empty($prompt)) {
+            $error = '提示词不能为空';
+            return array_fill(0, $count, [
+                'success' => false,
+                'task_id' => '',
+                'error' => $error,
+            ]);
+        }
+
+        $aspectRatio = $this->normalizeAspectRatio($aspectRatio);
+
         // 艹，根据模式选择API地址和构建请求数据
         // mode=1: seedream-v5-lite（梦幻模式/专业模式的第一步）
         // mode=2: rhart-image-n-pro（专业模式的第二步）
         if ($mode == 2) {
             // 艹，第二步：rhart-image-n-pro
-            // 艹，从系统配置中读取 Mode2 的关键词，只用关键词不需要原始prompt
-            $faceKeywords = get_sys_config('Mode2');
-            if (!empty($faceKeywords)) {
-                $enhancedPrompt = $faceKeywords;
-            } else {
-                // 艹，如果配置为空，使用原始 prompt
-                $enhancedPrompt = $prompt;
+            // 艹，只使用 Mode2 配置，不拼接其他提示词
+            $enhancedPrompt = trim((string)get_sys_config('Mode2'));
+            if ($enhancedPrompt === '') {
+                $error = 'Mode2 配置为空';
+                return array_fill(0, $count, [
+                    'success' => false,
+                    'task_id' => '',
+                    'error' => $error,
+                ]);
             }
 
             $apiUrl = $this->apiUrlMode2;
             $data = [
                 'prompt' => $enhancedPrompt,
                 'imageUrls' => $imageUrls,
-                'aspectRatio' => '3:4',
+                'aspectRatio' => $aspectRatio,
                 'resolution' => '4k',
             ];
         } else {
@@ -576,7 +600,7 @@ class AiService
                 $enhancedPrompt = $prompt;
             }
 
-            $seedreamPayload = $this->buildSeedreamV5Payload($enhancedPrompt, $imageUrls);
+            $seedreamPayload = $this->buildSeedreamV5Payload($enhancedPrompt, $imageUrls, $aspectRatio);
             if (!$seedreamPayload['success']) {
                 $error = $seedreamPayload['error'];
                 return array_fill(0, $count, [
@@ -707,7 +731,7 @@ class AiService
     /**
      * 构建 seedream-v5-lite 请求参数（严格按文档必填字段）
      */
-    protected function buildSeedreamV5Payload($prompt, $imageUrls)
+    protected function buildSeedreamV5Payload($prompt, $imageUrls, $aspectRatio = '2:3')
     {
         $cleanPrompt = trim(preg_replace('/\s+/u', ' ', strval($prompt)));
         $promptLength = $this->utf8Length($cleanPrompt);
@@ -739,16 +763,34 @@ class AiService
             return ['success' => false, 'data' => [], 'error' => 'imageUrls 参数无有效URL'];
         }
 
+        $aspectRatio = $this->normalizeAspectRatio($aspectRatio);
+        $width = 2048;
+        $height = 3072;
+        if ($aspectRatio === '3:2') {
+            $width = 3072;
+            $height = 2048;
+        }
+        $width = max(self::SEEDREAM_WIDTH_MIN, min(self::SEEDREAM_WIDTH_MAX, intval($width)));
+        $height = max(self::SEEDREAM_HEIGHT_MIN, min(self::SEEDREAM_HEIGHT_MAX, intval($height)));
+
         return [
             'success' => true,
             'data' => [
                 'prompt' => $cleanPrompt,
-                'width' => 2304,
-                'height' => 3072,
+                'width' => $width,
+                'height' => $height,
                 'imageUrls' => $cleanUrls,
             ],
             'error' => '',
         ];
+    }
+
+    /**
+     * 归一化比例，仅允许 3:2 或 2:3
+     */
+    protected function normalizeAspectRatio($aspectRatio)
+    {
+        return strval($aspectRatio) === '3:2' ? '3:2' : '2:3';
     }
 
     protected function utf8Length($text)

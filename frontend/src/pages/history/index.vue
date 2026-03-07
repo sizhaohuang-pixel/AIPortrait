@@ -7,11 +7,11 @@
 
 		<SkeletonLoader v-if="loading" />
 		<view v-else-if="history.length" class="grid">
-			<view v-for="item in history" :key="item.id" class="card" @tap="goDetail(item)" @longpress="showDeleteMenu(item)">
-				<view v-if="item.status === 0" class="cover-placeholder">
-					<view class="placeholder-shine"></view>
-				</view>
-				<image v-else class="cover" :src="item.coverUrl" mode="aspectFill" lazy-load></image>
+				<view v-for="item in history" :key="item.id" class="card" @tap="goDetail(item)" @longpress="showDeleteMenu(item)">
+					<view v-if="isGeneratingStatus(item.status)" :class="['cover-placeholder', getRatioClass(item.coverRatio)]">
+						<view class="placeholder-shine"></view>
+					</view>
+					<image v-else :class="['cover', getRatioClass(item.coverRatio)]" :src="item.coverUrl" mode="aspectFill" lazy-load></image>
 				<view class="meta">
 					<view class="name">{{ item.template_title || item.title }}</view>
 					<view class="time">{{ item.timeText }}</view>
@@ -26,6 +26,11 @@
 			<text class="empty-text">相册空空如也，快去生成写真吧</text>
 			<button class="go-home-btn" @tap="goHome">去看看模板</button>
 		</view>
+		<view v-if="!loading && history.length && requesting && hasMore" class="loading-more">
+			<view class="loading-spinner"></view>
+			<text class="loading-text">加载中...</text>
+		</view>
+		<view v-if="!loading && history.length && !hasMore" class="no-more">没有更多了</view>
 	</view>
 </template>
 
@@ -43,11 +48,18 @@
 			return {
 				history: [],
 				loading: true,
+				requesting: false,
 				page: 1,
 				limit: 20,
 				total: 0,
 				// 艹，轮询定时器
 				pollingTimer: null
+			}
+		},
+		computed: {
+			hasMore() {
+				if (!this.total) return false
+				return this.history.length < this.total
 			}
 		},
 		onShow() {
@@ -63,6 +75,13 @@
 			this.loadHistory()
 			// 艹，启动轮询
 			this.startPolling()
+		},
+		onReachBottom() {
+			if (this.requesting || !this.hasMore) {
+				return
+			}
+			this.page += 1
+			this.loadHistory(false, true)
 		},
 		onHide() {
 			// 艹，页面隐藏时停止轮询
@@ -81,13 +100,15 @@
 				// 艹，每3秒检查一次
 				this.pollingTimer = setInterval(() => {
 					// 艹，检查是否有生成中的任务
-					const hasGenerating = this.history.some(item => item.status === 0)
-					if (hasGenerating) {
-						// 艹，静默刷新（不显示loading）
-						this.loadHistory(true)
-					} else {
+					const hasGenerating = this.history.some(item => this.isGeneratingStatus(item.status))
+					if (!hasGenerating) {
 						// 艹，没有生成中的任务，停止轮询
 						this.stopPolling()
+						return
+					}
+					if (!this.requesting) {
+						// 艹，静默刷新（不显示loading）
+						this.loadHistory(true)
 					}
 				}, 3000)
 			},
@@ -101,17 +122,32 @@
 			},
 
 			// 加载历史记录
-			async loadHistory(silent = false) {
+			async loadHistory(silent = false, append = false) {
+				if (this.requesting) {
+					return
+				}
+
 				try {
+					this.requesting = true
 					// 艹，静默刷新时不显示loading
-					if (!silent) {
+					if (!silent && this.history.length === 0) {
 						this.loading = true
 					}
 
-					const data = await getHistory(this.page, this.limit)
+					let data
+					if (append) {
+						data = await getHistory(this.page, this.limit)
+					} else if (silent) {
+						const loadedLimit = Math.max(this.history.length || 0, this.limit)
+						data = await getHistory(1, loadedLimit)
+					} else {
+						this.page = 1
+						data = await getHistory(1, this.limit)
+					}
 					const list = data.list || []
 
 					// 处理数据
+					const prevMap = new Map(this.history.map(item => [item.id, item]))
 					const next = []
 					for (const item of list) {
 						// 获取封面图（取第一张结果图）
@@ -127,22 +163,46 @@
 							cover = API_CONFIG.baseURL + cover
 						}
 
+						const prev = prevMap.get(item.id)
+						const baseRatio = (prev && prev.coverRatio ? prev.coverRatio : '2:3')
+						const ratioDetected = !!(prev && prev.ratioDetected)
+
 						next.push({
 							...item,
 							coverUrl: cover,
 							timeText: this.formatTime(item.complete_time ? item.complete_time * 1000 : item.create_time * 1000),
-							progress: item.progress || 0
+							progress: item.progress || 0,
+							coverRatio: baseRatio,
+							ratioDetected
 						})
 					}
 
-					this.history = next
+					if (append) {
+						const merged = this.history.slice()
+						const mergedMap = new Map(merged.map(item => [item.id, item]))
+						next.forEach(item => {
+							if (mergedMap.has(item.id)) {
+								Object.assign(mergedMap.get(item.id), item)
+							} else {
+								merged.push(item)
+								mergedMap.set(item.id, item)
+							}
+						})
+						this.history = merged
+					} else {
+						// 先渲染列表，不阻塞首屏
+						this.history = next
+					}
 					this.total = data.total || 0
 
 					// 艹，如果有生成中的任务，确保轮询在运行
-					const hasGenerating = next.some(item => item.status === 0)
+					const hasGenerating = next.some(item => this.isGeneratingStatus(item.status))
 					if (hasGenerating && !this.pollingTimer) {
 						this.startPolling()
 					}
+
+					// 异步补齐未知比例，避免骨架屏等待全部图片探测
+					this.fillMissingRatios(next)
 				} catch (error) {
 					console.error('加载历史记录失败：', error)
 
@@ -157,6 +217,7 @@
 						icon: 'none'
 					})
 				} finally {
+					this.requesting = false
 					this.loading = false
 				}
 			},
@@ -164,7 +225,7 @@
 			// 跳转到详情
 			goDetail(item) {
 				// 如果任务还在生成中，跳转到生成中页面
-				if (item.status === 0) {
+				if (this.isGeneratingStatus(item.status)) {
 					uni.navigateTo({
 						url: `/pages/generating/index?taskId=${item.id}`
 					})
@@ -215,7 +276,7 @@
 									icon: 'success'
 								})
 								// 重新加载列表
-								self.loadHistory()
+								self.loadHistory(false, false)
 							} catch (error) {
 								console.error('删除失败：', error)
 								uni.showToast({
@@ -234,7 +295,7 @@
 
 			// 获取状态样式类
 			getStatusClass(item) {
-				if (item.status === 0) {
+				if (this.isGeneratingStatus(item.status)) {
 					return 'is-generating'
 				}
 				if (item.status === 2) {
@@ -245,13 +306,52 @@
 
 			// 获取状态文本
 			getStatusText(item) {
-				if (item.status === 0) {
-					return `生成中 ${item.progress}%`
+				if (this.isGeneratingStatus(item.status)) {
+					const progress = Math.max(0, Math.min(100, parseInt(item.progress || 0)))
+					return `生成中 ${progress}%`
 				}
 				if (item.status === 2) {
 					return '生成失败'
 				}
 				return '已完成'
+			},
+
+			isGeneratingStatus(status) {
+				return status === 0
+			},
+
+			getRatioClass(ratio) {
+				return ratio === '3:2' ? 'ratio-landscape' : 'ratio-portrait'
+			},
+
+			fillMissingRatios(list) {
+				const pending = list.filter(item => !item.ratioDetected && item.coverUrl)
+				pending.forEach(async (item) => {
+					const ratio = await this.detectImageAspectRatio(item.coverUrl)
+					const target = this.history.find(h => h.id === item.id)
+					if (target) {
+						target.coverRatio = ratio
+						target.ratioDetected = true
+					}
+				})
+			},
+
+			detectImageAspectRatio(url) {
+				return new Promise((resolve) => {
+					if (!url) {
+						resolve('2:3')
+						return
+					}
+					uni.getImageInfo({
+						src: url,
+						success: (res) => {
+							resolve(res.width > res.height ? '3:2' : '2:3')
+						},
+						fail: () => {
+							resolve('2:3')
+						}
+					})
+				})
 			},
 
 			// 格式化时间
@@ -320,25 +420,22 @@
 
 	.cover {
 		width: 100%;
-		aspect-ratio: 3 / 4;
-		height: 448rpx;
 		background: #f3f3f3;
 	}
 
 	.cover-placeholder {
 		position: relative;
 		width: 100%;
-		aspect-ratio: 3 / 4;
-		height: 448rpx;
 		background: linear-gradient(135deg, #efe3da 0%, #f7eee8 50%, #efe3da 100%);
 		overflow: hidden;
 	}
 
-	@supports (aspect-ratio: 1 / 1) {
-		.cover,
-		.cover-placeholder {
-			height: auto;
-		}
+	.ratio-portrait {
+		aspect-ratio: 2 / 3;
+	}
+
+	.ratio-landscape {
+		aspect-ratio: 3 / 2;
 	}
 
 	.placeholder-shine {
@@ -452,6 +549,33 @@
 
 	.no-more::before { left: 200rpx; }
 	.no-more::after { right: 200rpx; }
+
+	.loading-more {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 12rpx;
+		padding: 28rpx 0 20rpx;
+	}
+
+	.loading-spinner {
+		width: 28rpx;
+		height: 28rpx;
+		border-radius: 50%;
+		border: 3rpx solid #e5dbd4;
+		border-top-color: #8f8178;
+		animation: loadingSpin 0.8s linear infinite;
+	}
+
+	.loading-text {
+		font-size: 22rpx;
+		color: #9a8f88;
+	}
+
+	@keyframes loadingSpin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
 
 	@keyframes shine {
 		0% {

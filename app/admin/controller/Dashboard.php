@@ -59,8 +59,8 @@ class Dashboard extends Backend
         // 艹，获取最近7天的任务趋势
         $taskTrend = $this->getTaskTrend(7);
 
-        // 艹，获取最近的任务列表
-        $recentTasks = AiTask::with(['user'])
+        // 艹，获取最近的任务列表（关联用户和模板）
+        $recentTasks = AiTask::with(['user', 'aiTemplate'])
             ->order('create_time', 'desc')
             ->limit(10)
             ->select()

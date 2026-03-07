@@ -21,6 +21,15 @@
                     </template>
                 </el-table-column>
             </template>
+            <template #mode>
+                <el-table-column prop="mode" align="center" label="模式" width="80">
+                    <template #default="scope">
+                        <el-tag :type="getModeTagType(scope.row)">
+                            {{ getModeLabel(scope.row) }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+            </template>
         </Table>
 
         <!-- 详情对话框 -->
@@ -77,9 +86,9 @@ const baTable = new baTableClass(
                 label: '模式',
                 prop: 'mode',
                 align: 'center',
-                render: 'tag',
-                custom: { 1: 'primary', 2: 'success' },
-                replaceValue: { 1: '梦幻', 2: '专业' },
+                render: 'slot',
+                slotName: 'mode',
+                replaceValue: { 1: '梦幻', 2: '高清' },
                 operator: '=',
                 width: 80,
             },
@@ -132,6 +141,20 @@ baTable.mount()
 baTable.getData()
 
 provide('baTable', baTable)
+
+const getModeLabel = (row: any) => {
+    if (String(row?.share_code || '').startsWith('hd_') || Number(row?.mode) === 2) {
+        return '高清'
+    }
+    return '梦幻'
+}
+
+const getModeTagType = (row: any) => {
+    if (String(row?.share_code || '').startsWith('hd_') || Number(row?.mode) === 2) {
+        return 'warning'
+    }
+    return 'primary'
+}
 </script>
 
 <style scoped lang="scss"></style>

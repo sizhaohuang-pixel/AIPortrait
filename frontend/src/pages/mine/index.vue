@@ -186,7 +186,8 @@
 				userInfo: { nickname: '', mobile: '', avatar: '' },
 				scoreInfo: { score: 0, expire_time: 0, expire_days: 0 },
 				userStats: { received_likes: 0, received_collections: 0, fans_count: 0, follow_count: 0 },
-				siteConfig: { recordNumber: '', electricIncreaseNumber: '', publicSecurityRecord: '' }
+				siteConfig: { recordNumber: '', electricIncreaseNumber: '', publicSecurityRecord: '' },
+				serviceChatConfig: { corpId: '', url: '' }
 			}
 		},
 		computed: {
@@ -230,12 +231,45 @@
 		onShow() {
 			this.checkLoginStatus()
 			this.getSiteConfig()
+			this.loadServiceChatConfig()
 			if (this.isLogin) {
 				this.getScoreInfo()
 				this.getUserStats()
 			}
 		},
 		methods: {
+			async loadServiceChatConfig() {
+				try {
+					const data = await get('/api/score/config')
+					this.serviceChatConfig = {
+						corpId: data.service_corp_id || '',
+						url: data.service_chat_url || ''
+					}
+				} catch (error) {
+					console.error('获取客服配置失败:', error)
+				}
+			},
+			openEnterpriseService() {
+				const corpId = String(this.serviceChatConfig.corpId || '').trim()
+				const url = String(this.serviceChatConfig.url || '').trim()
+				if (!corpId || !url) return false
+				// #ifdef MP-WEIXIN
+				try {
+					wx.openCustomerServiceChat({
+						extInfo: { url },
+						corpId,
+						fail: (err) => {
+							console.error('openCustomerServiceChat fail:', err)
+							uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
+						}
+					})
+					return true
+				} catch (e) {
+					console.error('openCustomerServiceChat exception:', e)
+				}
+				// #endif
+				return false
+			},
 			checkLoginStatus() {
 				this.isLogin = isLogin()
 				if (this.isLogin) {
@@ -309,6 +343,10 @@
 				this.handleMenuTap({ currentTarget: { dataset: { url: '/pages/discovery/my', needLogin: '1' } } })
 			},
 			goAgreement(type) {
+				if (type === 'custom') {
+					const opened = this.openEnterpriseService()
+					if (opened) return
+				}
 				uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
 			},
 			goLogin() {

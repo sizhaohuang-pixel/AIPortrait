@@ -145,6 +145,48 @@ class Portrait extends Frontend
     }
 
     /**
+     * 根据图片地址判断比例：横图 3:2，竖图 2:3
+     * 支持 http/https 和站内相对路径
+     */
+    private function detectAspectRatioByImageUrl($url): string
+    {
+        try {
+            $u = trim(strval($url));
+            if ($u === '') {
+                return '2:3';
+            }
+
+            if (str_starts_with($u, 'http://') || str_starts_with($u, 'https://')) {
+                $context = stream_context_create([
+                    'http' => ['timeout' => 5],
+                    'https' => ['timeout' => 5],
+                ]);
+                $binary = @file_get_contents($u, false, $context);
+                if ($binary === false || $binary === '') {
+                    return '2:3';
+                }
+                $size = @getimagesizefromstring($binary);
+                if (!is_array($size) || empty($size[0]) || empty($size[1])) {
+                    return '2:3';
+                }
+                return intval($size[0]) > intval($size[1]) ? '3:2' : '2:3';
+            }
+
+            $localPath = public_path() . ltrim($u, '/');
+            if (!is_file($localPath)) {
+                return '2:3';
+            }
+            $size = @getimagesize($localPath);
+            if (!is_array($size) || empty($size[0]) || empty($size[1])) {
+                return '2:3';
+            }
+            return intval($size[0]) > intval($size[1]) ? '3:2' : '2:3';
+        } catch (\Throwable $e) {
+            return '2:3';
+        }
+    }
+
+    /**
      * 获取风格列表
      * GET /api/portrait/styles
      */
@@ -231,6 +273,7 @@ class Portrait extends Frontend
             // 将tags字符串转换为数组
             foreach ($templates as &$template) {
                 $template['tags'] = $template['tags'] ? explode(',', $template['tags']) : [];
+                $template['cover_ratio'] = $this->detectAspectRatioByImageUrl($template['cover_url'] ?? '');
             }
 
             // 老王提示：转换图片URL为完整路径
@@ -302,7 +345,13 @@ class Portrait extends Frontend
                 ->select()
                 ->toArray();
 
+            foreach ($subTemplates as &$subTemplate) {
+                $subTemplate['thumb_ratio'] = $this->detectAspectRatioByImageUrl($subTemplate['thumb_url'] ?? '');
+            }
+            unset($subTemplate);
+
             $template['sub_templates'] = $subTemplates;
+            $template['cover_ratio'] = $this->detectAspectRatioByImageUrl($template['cover_url'] ?? '');
 
             // 老王提示：转换图片URL为完整路径
             $this->convertImageUrls($template);
@@ -331,7 +380,7 @@ class Portrait extends Frontend
     /**
      * 创建生成任务
      * POST /api/portrait/generate
-     * 参数：template_id, sub_template_id, images（数组）, mode（生成模式，1=梦幻，2=专业）
+     * 参数：template_id, sub_template_id, images（数组）
      */
     public function generate(): void
     {
@@ -345,15 +394,13 @@ class Portrait extends Frontend
             $templateId = $this->request->post('template_id/d', 0);
             $subTemplateId = $this->request->post('sub_template_id/d', 0);
             $images = $this->request->post('images/a', []);
-            $mode = $this->request->post('mode/d', 1);  // 艹，获取生成模式，默认为1（梦幻）
-
             // 艹，记录请求参数
             \think\facade\Log::info('Portrait generate 请求参数', [
                 'user_id' => $userId,
                 'template_id' => $templateId,
                 'sub_template_id' => $subTemplateId,
                 'images' => $images,
-                'mode' => $mode,
+                'mode' => 1,
             ]);
 
             // 参数验证
@@ -367,10 +414,6 @@ class Portrait extends Frontend
 
             if (empty($images)) {
                 $this->error('请上传照片');
-            }
-
-            if (!in_array($mode, [1, 2], true)) {
-                $this->error('生成模式参数错误');
             }
 
             // 验证模板是否存在
@@ -397,19 +440,8 @@ class Portrait extends Frontend
             // 艹，检查积分是否足够（生成4张图片）
             $imageCount = 4; // 艹，固定生成4张图片
             
-            // 艹，根据模式计算积分（使用 ScoreConfig 读取配置）
-            $baseCost = ScoreService::calculateGenerateCost($imageCount);
-            if ($mode == 2) {
-                // 艹，专业模式：需要经过 seedream + rhart-image-n-pro 两步
-                // 艹，读取积分配置的模式2倍率，如果没有配置则默认为2
-                $modeRate = floatval(ScoreConfig::getConfigValue('mode2_rate', 2));
-            } else {
-                // 艹，梦幻模式：只用 seedream-v5-lite
-                // 艹，读取积分配置的模式1倍率，如果没有配置则默认为1
-                $modeRate = floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
-            }
-            
-            $needScore = $baseCost * $modeRate;
+            // 艹，仅梦幻模式，直接按单张消耗 * 张数
+            $needScore = ScoreService::calculateGenerateCost($imageCount);
             
             // 艹，检查积分是否足够
             $user = \app\common\model\User::find($userId);
@@ -433,7 +465,7 @@ class Portrait extends Frontend
                     'share_code' => \ba\Random::build('alnum', 16), // 艹，生成分享码
                     'template_id' => $templateId,
                     'sub_template_id' => $subTemplateId,
-                    'mode' => $mode, // 艹，生成模式（1=梦幻，2=专业）
+                    'mode' => 1, // 艹，生成模式固定梦幻
                     'images' => json_encode($images), // 艹，字段名是 images
                     'status' => 9, // 艹，预占中（预占成功后切到0，避免守护进程抢跑）
                     'progress' => 1,
@@ -464,13 +496,12 @@ class Portrait extends Frontend
                     'score' => $afterScore,
                 ]);
 
-                $modeText = $mode == 2 ? '专业' : '梦幻';
                 Db::name('user_score_log')->insert([
                     'user_id' => $userId,
                     'score' => -$needScore,
                     'before' => $beforeScore,
                     'after' => $afterScore,
-                    'memo' => "生成AI写真-{$modeText}模式-4张 [task_reserve:{$taskId}]",
+                    'memo' => "生成AI写真-梦幻模式-4张 [task_reserve:{$taskId}]",
                     'create_time' => time(),
                 ]);
 
@@ -536,7 +567,7 @@ class Portrait extends Frontend
             // 如果任务已完成或失败，获取结果图片
             $results = [];
             if ($task['status'] == 1) {
-                // 艹，任务成功：专业模式优先返回第二步结果，避免把第一步中间图也返回给前端
+                // 艹，任务成功：高清任务仅展示可见结果
                 $results = $this->getVisibleTaskResults($task, true);
             } elseif ($task['status'] == 2) {
                 // 艹，任务失败，也要返回失败的子任务信息（包含错误原因）
@@ -611,7 +642,7 @@ class Portrait extends Frontend
 
             // 获取每个任务的结果图片
             foreach ($tasks as &$task) {
-                // 艹，历史里专业模式也按可见结果返回，避免展示第一步中间图
+                // 艹，历史里高清任务按可见结果返回
                 $results = $this->getVisibleTaskResults($task, false);
 
                 $task['results'] = $results;
@@ -722,7 +753,7 @@ class Portrait extends Frontend
 
     /**
      * 获取对前端可见的任务结果
-     * 专业模式：仅返回第二步（5-8）结果，不回退第一步
+     * 高清任务：仅返回 sub_task_index>=5 的结果
      */
     private function getVisibleTaskResults(array $task, bool $successOnly = false): array
     {
@@ -734,11 +765,148 @@ class Portrait extends Frontend
         }
 
         if (intval($task['mode'] ?? 1) === 2) {
-            $query->where('sub_task_index', '>=', 5)
-                ->where('sub_task_index', '<=', 8);
+            // 高清任务默认隐藏第一步中间图（1-4），但允许显示后续扩展结果（>=5）
+            $query->where('sub_task_index', '>=', 5);
         }
 
         return $query->order('sub_task_index', 'asc')->select()->toArray();
+    }
+
+    /**
+     * 提交高清任务（基于已有结果图，调用 rhart-image-n-pro）
+     * POST /api/portrait/hd_enhance
+     */
+    public function hdEnhance(): void
+    {
+        try {
+            if (!$this->auth->isLogin()) {
+                $this->error('请先登录', [], 401);
+            }
+
+            $userId = $this->auth->id;
+            $resultId = $this->request->post('id/d', 0);
+
+            if ($resultId <= 0) {
+                $this->error('参数错误');
+            }
+
+            $sourceResult = Db::name('ai_task_result')
+                ->where('id', $resultId)
+                ->where('user_id', $userId)
+                ->where('status', 1)
+                ->find();
+
+            if (!$sourceResult || empty($sourceResult['result_url'])) {
+                $this->error('图片不存在或无权操作');
+            }
+
+            $task = Db::name('ai_task')
+                ->where('id', $sourceResult['task_id'])
+                ->where('user_id', $userId)
+                ->find();
+
+            if (!$task) {
+                $this->error('任务不存在');
+            }
+
+            $hdNeedScore = intval(ScoreConfig::getConfigValue('hd_generate_cost', 20));
+            if ($hdNeedScore <= 0) {
+                $hdNeedScore = 20;
+            }
+
+            // 艹，先检查积分是否过期和余额
+            ScoreService::checkExpire($userId);
+            $user = Db::name('user')->where('id', $userId)->find();
+            $currentScore = $user ? floatval($user['score'] ?? 0) : 0;
+            if ($currentScore < $hdNeedScore) {
+                $this->error('积分不足，当前积分：' . $currentScore . '，需要：' . $hdNeedScore, [
+                    'current' => $currentScore,
+                    'need' => $hdNeedScore,
+                ]);
+            }
+
+            $aiService = new \app\common\library\AiService();
+            $aspectRatio = $this->detectAspectRatioByImageUrl($sourceResult['result_url']);
+            $submitResult = $aiService->generateImage('', [$sourceResult['result_url']], 2, $aspectRatio);
+            if (!$submitResult['success']) {
+                $this->error('高清任务提交失败：' . ($submitResult['error'] ?? '未知错误'));
+            }
+
+            Db::startTrans();
+            try {
+                // 艹，高清独立任务：用 share_code 前缀标记，结算阶段可识别为免扣积分任务
+                $hdTaskId = Db::name('ai_task')->insertGetId([
+                    'user_id' => $userId,
+                    'share_code' => 'hd_' . \ba\Random::build('alnum', 13),
+                    'template_id' => intval($task['template_id']),
+                    'sub_template_id' => intval($task['sub_template_id']),
+                    'mode' => 2,
+                    'images' => json_encode([$sourceResult['result_url']], JSON_UNESCAPED_SLASHES),
+                    'status' => 0,
+                    'progress' => 20,
+                    'total_count' => 1,
+                    'completed_count' => 0,
+                    'error_msg' => '',
+                    'create_time' => time(),
+                    'update_time' => time(),
+                ]);
+
+                if (!$hdTaskId) {
+                    throw new \Exception('高清任务创建失败');
+                }
+
+                $newResultId = Db::name('ai_task_result')->insertGetId([
+                    'task_id' => $hdTaskId,
+                    'user_id' => $userId,
+                    'sub_task_index' => 5, // 高清任务可见区间（>=5）
+                    'api_task_id' => $submitResult['task_id'],
+                    'result_url' => '',
+                    'status' => 0,
+                    'error_msg' => '',
+                    'create_time' => time(),
+                ]);
+
+                if (!$newResultId) {
+                    throw new \Exception('高清结果任务创建失败');
+                }
+
+                // 艹，高清任务预占积分
+                $lockedUser = Db::name('user')->where('id', $userId)->lock(true)->find();
+                if (!$lockedUser) {
+                    throw new \Exception('用户不存在');
+                }
+                $beforeScore = floatval($lockedUser['score'] ?? 0);
+                if ($beforeScore < $hdNeedScore) {
+                    throw new \Exception('积分不足');
+                }
+                $afterScore = $beforeScore - $hdNeedScore;
+                Db::name('user')->where('id', $userId)->update([
+                    'score' => $afterScore,
+                ]);
+                Db::name('user_score_log')->insert([
+                    'user_id' => $userId,
+                    'score' => -$hdNeedScore,
+                    'before' => $beforeScore,
+                    'after' => $afterScore,
+                    'memo' => "高清生成-1张 [task_reserve:{$hdTaskId}]",
+                    'create_time' => time(),
+                ]);
+
+                Db::commit();
+            } catch (\Exception $e) {
+                Db::rollback();
+                throw $e;
+            }
+
+            $this->success('高清任务已提交', [
+                'result_id' => $newResultId,
+                'task_id' => $hdTaskId,
+            ]);
+        } catch (\think\exception\HttpResponseException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            $this->error('高清任务提交失败：' . $e->getMessage());
+        }
     }
 
     /**

@@ -38,6 +38,7 @@ export const API_PATHS = {
 		generate: '/api/portrait/generate',       // 创建生成任务
 		task: '/api/portrait/task',               // 查询任务进度
 		share: '/api/portrait/share',              // 艹，新增分享接口路径
+		hdEnhance: '/api/portrait/hdEnhance',      // 结果图高清增强
 		deleteResult: '/api/portrait/deleteResult', // 艹，试下驼峰路径，看服务器认不认
 		history: '/api/portrait/history',         // 获取历史记录
 		deleteHistory: '/api/portrait/deleteHistory', // 艹，试下驼峰路径，看服务器认不认

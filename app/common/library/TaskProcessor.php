@@ -27,7 +27,7 @@ class TaskProcessor
      * 艹，配置常量
      */
     const TASK_TIMEOUT = 600;           // 任务超时时间（10分钟）- 梦幻模式
-    const MODE2_TASK_TIMEOUT = 1200;    // 专业模式超时时间（20分钟）- 需要执行两步
+    const MODE2_TASK_TIMEOUT = 1200;    // 高清任务超时时间（20分钟）
     const MAX_RETRY_TIMES = 3;          // 最大重试次数
     const RETRY_DELAY = 2;              // 重试延迟（秒）
     const IMAGES_PER_TASK = 4;          // 每个任务生成的图片数量
@@ -118,29 +118,33 @@ class TaskProcessor
             // 艹，更新进度到15%（跳过上传阶段）
             $this->updateTaskField($task->id, ['progress' => 15]);
 
+            // 艹，输出比例优先按子模板方向，识别失败再回退到上传图方向
+            $aspectRatio = $this->resolveAspectRatio($subTemplate, $publicImageUrls);
+            Log::info("TaskProcessor 自动判断输出比例（优先子模板）", [
+                'task_id' => $taskId,
+                'aspect_ratio' => $aspectRatio,
+            ]);
+
             // 艹，判断生成模式
             $mode = $task->mode;
 
             if ($mode == 2) {
-                // 艹，专业模式：先用 seedream 生成图片，再用 rhart-image-n-pro 生成
-                // 艹，修改为异步流程：只提交第一步，不等待结果
-                Log::info("TaskProcessor 专业模式两步流程开始（异步）", [
+                // 艹，高清任务：直接走 rhart-image-n-pro 单步生成
+                Log::info("TaskProcessor 高清任务开始处理", [
                     'task_id' => $taskId,
                 ]);
 
-                // 艹，第一步：只提交 seedream-v5-lite 任务，不等待结果
-                // 专业模式第一步必须走 seedream（mode=1）
-                $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 1, 1);
+                // 艹，高清任务只提交一张结果（独立任务）
+                $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 2, 2, 1, $aspectRatio);
 
                 // 艹，检查第一步是否提交成功
                 if ($submittedCount == 0) {
-                    Log::error("TaskProcessor 第一步提交完全失败");
-                    $this->updateTaskError($task, '第一步（seedream）提交失败');
+                    Log::error("TaskProcessor 高清任务提交失败");
+                    $this->updateTaskError($task, '高清任务提交失败');
                     return false;
                 }
 
-                // 艹，第一步已提交，立即返回，由 pollPendingTasks 轮询结果
-                Log::info("TaskProcessor 第一步已提交，等待轮询处理", [
+                Log::info("TaskProcessor 高清任务已提交，等待轮询处理", [
                     'task_id' => $taskId,
                     'submitted_count' => $submittedCount,
                 ]);
@@ -149,7 +153,7 @@ class TaskProcessor
                 $this->updateTaskField($task->id, [
                     'status' => 0,
                     'progress' => 20,
-                    'error_msg' => '第一步提交完成，等待处理',
+                    'error_msg' => '高清任务提交完成，等待处理',
                 ]);
 
                 return true;
@@ -162,7 +166,7 @@ class TaskProcessor
                 ]);
 
                 // 艹，提交4个任务到API（step=1）
-                $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 1, $mode);
+                $submittedCount = $this->submitTasksToApi($task, $prompt, $publicImageUrls, 1, $mode, null, $aspectRatio);
             }
 
             // 艹，检查是否所有任务都提交失败了
@@ -504,8 +508,9 @@ class TaskProcessor
             $subTemplate = AiTemplateSub::find($task->sub_template_id);
             $prompt = $subTemplate ? $subTemplate->prompt : '';
 
-            // 艹，提交第二步（step=2），提交数量=第一步成功数量
-            $submittedCount = $this->submitTasksToApi($task, $prompt, $step2Urls, 2, null, $successCount);
+            // 艹，提交第二步（step=2），比例仍优先跟随子模板，避免被输入图方向覆盖
+            $aspectRatio = $this->resolveAspectRatio($subTemplate, $step2Urls);
+            $submittedCount = $this->submitTasksToApi($task, $prompt, $step2Urls, 2, null, $successCount, $aspectRatio);
 
             if ($submittedCount == 0) {
                 Log::error("TaskProcessor 第二步提交失败", [
@@ -768,17 +773,17 @@ class TaskProcessor
     /**
      * 处理超时任务
      * 艹，这个方法处理那些卡在进度里的"僵尸任务"
-     * 超时时间：梦幻模式10分钟（600秒），专业模式20分钟（1200秒）
+     * 超时时间：梦幻任务10分钟（600秒），高清任务20分钟（1200秒）
      *
      * @return void
      */
     public function handleTimeoutTasks()
     {
         try {
-            // 艹，分别查询梦幻模式和专业模式的超时任务
+            // 艹，分别查询梦幻任务和高清任务的超时任务
             // 梦幻模式（mode=1）：10分钟超时
             $mode1TimeoutThreshold = time() - self::TASK_TIMEOUT;
-            // 专业模式（mode=2）：20分钟超时（需要执行两步）
+            // 高清任务（mode=2）：20分钟超时
             $mode2TimeoutThreshold = time() - self::MODE2_TASK_TIMEOUT;
 
             // 艹，查询梦幻模式的超时任务
@@ -787,7 +792,7 @@ class TaskProcessor
                 ->where('create_time', '<', $mode1TimeoutThreshold)
                 ->select();
 
-            // 艹，查询专业模式的超时任务
+            // 艹，查询高清任务的超时任务
             $mode2TimeoutTasks = AiTask::whereIn('status', [0, 9])
                 ->where('mode', 2)
                 ->where('create_time', '<', $mode2TimeoutThreshold)
@@ -1068,13 +1073,14 @@ class TaskProcessor
      * @param $prompt 提示词
      * @param $imageUrls 图片URL数组
      * @param int $step 步骤（1=第一步/seedream，2=第二步/rhart）
-     * @param int $mode 生成模式（1=梦幻，2=专业），默认为任务对象的mode
+     * @param int $mode 生成模式（1=梦幻，2=高清），默认为任务对象的mode
      * @param int|null $taskCount 本次提交数量，默认固定4张
      */
-    protected function submitTasksToApi($task, $prompt, $imageUrls, $step = 1, $mode = null, $taskCount = null)
+    protected function submitTasksToApi($task, $prompt, $imageUrls, $step = 1, $mode = null, $taskCount = null, $aspectRatio = '2:3')
     {
         $mode = $mode ?? $task->mode;
         $taskCount = $taskCount ?? self::IMAGES_PER_TASK;
+        $aspectRatio = strval($aspectRatio) === '3:2' ? '3:2' : '2:3';
 
         // 艹，计算 sub_task_index：第一步 1-4，第二步 5-8
         $baseIndex = ($step - 1) * 4;
@@ -1085,15 +1091,16 @@ class TaskProcessor
             'mode' => $mode,
             'base_index' => $baseIndex,
             'task_count' => $taskCount,
+            'aspect_ratio' => $aspectRatio,
         ]);
 
-        // 专业模式第二步：逐张一一对应提交，每次只传一张图给接口
+        // 高清任务：逐张提交，每次只传一张图给接口
         if ($step == 2 && $mode == 2) {
-            return $this->submitStep2TasksOneByOne($task, $prompt, $imageUrls, $baseIndex);
+            return $this->submitStep2TasksOneByOne($task, $prompt, $imageUrls, $baseIndex, $aspectRatio);
         }
 
         // 艹，使用批量异步提交，传递mode参数
-        $results = $this->aiService->generateImageBatch($prompt, $imageUrls, $taskCount, $mode);
+        $results = $this->aiService->generateImageBatch($prompt, $imageUrls, $taskCount, $mode, $aspectRatio);
 
         // 艹，处理每个子任务的结果
         $submittedCount = 0;
@@ -1139,10 +1146,10 @@ class TaskProcessor
     }
 
     /**
-     * 专业模式第二步逐张提交
+     * 高清任务逐张提交
      * 每个子任务只使用对应的一张第一步结果图，避免接口复用同一张输入
      */
-    protected function submitStep2TasksOneByOne($task, $prompt, $imageUrls, $baseIndex)
+    protected function submitStep2TasksOneByOne($task, $prompt, $imageUrls, $baseIndex, $aspectRatio = '2:3')
     {
         $submittedCount = 0;
         $taskCount = count($imageUrls);
@@ -1151,7 +1158,7 @@ class TaskProcessor
             $subTaskIndex = $baseIndex + $index + 1;
             $singleInput = [$singleImageUrl];
 
-            $result = $this->aiService->generateImage($prompt, $singleInput, 2);
+            $result = $this->aiService->generateImage($prompt, $singleInput, 2, $aspectRatio);
 
             if ($result['success']) {
                 $apiTaskId = $result['task_id'];
@@ -1185,6 +1192,109 @@ class TaskProcessor
         ]);
 
         return $submittedCount;
+    }
+
+    /**
+     * 根据第一张可用输入图自动判断输出比例
+     */
+    protected function detectAspectRatioByImageUrls($imageUrls)
+    {
+        foreach ((array)$imageUrls as $url) {
+            $url = trim(strval($url));
+            if ($url === '') {
+                continue;
+            }
+
+            $size = $this->getImageSizeByUrl($url);
+            if (!empty($size['width']) && !empty($size['height'])) {
+                return intval($size['width']) > intval($size['height']) ? '3:2' : '2:3';
+            }
+        }
+
+        return '2:3';
+    }
+
+    /**
+     * 输出比例解析：
+     * 1. 优先按子模板缩略图方向（模板决定产出横竖）
+     * 2. 子模板无法识别时回退到输入图方向
+     */
+    protected function resolveAspectRatio($subTemplate, $fallbackImageUrls = []): string
+    {
+        $thumbUrl = '';
+        if ($subTemplate && isset($subTemplate->thumb_url)) {
+            $thumbUrl = trim(strval($subTemplate->thumb_url));
+        }
+
+        if ($thumbUrl !== '') {
+            $size = $this->getImageSizeByUrlOrLocal($thumbUrl);
+            if (!empty($size['width']) && !empty($size['height'])) {
+                return intval($size['width']) > intval($size['height']) ? '3:2' : '2:3';
+            }
+        }
+
+        return $this->detectAspectRatioByImageUrls($fallbackImageUrls);
+    }
+
+    /**
+     * 获取图片尺寸，失败返回空数组
+     */
+    protected function getImageSizeByUrl($url)
+    {
+        try {
+            $context = stream_context_create([
+                'http' => ['timeout' => 5],
+                'https' => ['timeout' => 5],
+            ]);
+            $binary = @file_get_contents($url, false, $context);
+            if ($binary === false || $binary === '') {
+                return [];
+            }
+            $size = @getimagesizefromstring($binary);
+            if (is_array($size) && !empty($size[0]) && !empty($size[1])) {
+                return ['width' => intval($size[0]), 'height' => intval($size[1])];
+            }
+        } catch (\Throwable $e) {
+            Log::warning("TaskProcessor 获取图片尺寸失败", [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return [];
+    }
+
+    /**
+     * 兼容 http/https 与站内相对路径
+     */
+    protected function getImageSizeByUrlOrLocal($url)
+    {
+        $u = trim(strval($url));
+        if ($u === '') {
+            return [];
+        }
+
+        if (str_starts_with($u, 'http://') || str_starts_with($u, 'https://')) {
+            return $this->getImageSizeByUrl($u);
+        }
+
+        try {
+            $localPath = public_path() . ltrim($u, '/');
+            if (!is_file($localPath)) {
+                return [];
+            }
+            $size = @getimagesize($localPath);
+            if (is_array($size) && !empty($size[0]) && !empty($size[1])) {
+                return ['width' => intval($size[0]), 'height' => intval($size[1])];
+            }
+        } catch (\Throwable $e) {
+            Log::warning("TaskProcessor 获取本地图片尺寸失败", [
+                'url' => $u,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return [];
     }
 
     /**
@@ -1228,7 +1338,7 @@ class TaskProcessor
      * @param int $userId 用户ID
      * @param int $taskId 任务ID
      * @param int $successCount 成功张数
-     * @param int $mode 模式（1=梦幻，2=专业）
+     * @param int $mode 模式（1=梦幻，2=高清）
      */
     protected function settleScore($userId, $taskId, $successCount = 0, $mode = null)
     {
@@ -1261,15 +1371,15 @@ class TaskProcessor
 
             // 艹，获取任务信息来确定模式
             $task = AiTask::find($taskId);
-            $mode = $task ? $task->mode : 1;
-            $modeText = $mode == 2 ? '专业' : '梦幻';
+            $mode = $task ? intval($task->mode) : 1;
+            $shareCode = strval($task->share_code ?? '');
+            $isHdTask = ($mode === 2) || ($shareCode !== '' && str_starts_with($shareCode, 'hd_'));
+            $modeText = $isHdTask ? '高清' : '梦幻';
 
-            // 艹，计算实际消费金额
-            $baseCost = floatval(ScoreConfig::getConfigValue('generate_cost', 10));
-            $rate = ($mode == 2)
-                ? floatval(ScoreConfig::getConfigValue('mode2_rate', 2))
-                : floatval(ScoreConfig::getConfigValue('mode1_rate', 1));
-            $costPerImage = $baseCost * $rate;
+            // 艹，计算实际消费金额（已移除倍率）
+            $costPerImage = $isHdTask
+                ? floatval(ScoreConfig::getConfigValue('hd_generate_cost', 20))
+                : floatval(ScoreConfig::getConfigValue('generate_cost', 10));
             $actualAmount = $costPerImage * $successCount;
 
             // 艹，读取预占记录
@@ -1307,7 +1417,7 @@ class TaskProcessor
                         'score' => $delta,
                         'before' => $before,
                         'after' => $after,
-                        'memo' => "生成AI写真-{$modeText}模式-差额退还 {$settleMark}",
+                        'memo' => "{$modeText}生成-差额退还 {$settleMark}",
                     ]);
                 } elseif ($delta < 0) {
                     // 艹，补扣差额（理论极少）
@@ -1324,7 +1434,7 @@ class TaskProcessor
                         'score' => -$extraConsume,
                         'before' => $before,
                         'after' => $after,
-                        'memo' => "生成AI写真-{$modeText}模式-差额补扣 {$settleMark}",
+                        'memo' => "{$modeText}生成-差额补扣 {$settleMark}",
                     ]);
                 } else {
                     // 艹，金额刚好，写0分幂等标记
@@ -1333,7 +1443,7 @@ class TaskProcessor
                         'score' => 0,
                         'before' => $currentScore,
                         'after' => $currentScore,
-                        'memo' => "生成AI写真-{$modeText}模式-生成完成 {$settleMark}",
+                        'memo' => "{$modeText}生成-生成完成 {$settleMark}",
                     ]);
                 }
             } else {
@@ -1351,7 +1461,7 @@ class TaskProcessor
                         'score' => -$actualAmount,
                         'before' => $before,
                         'after' => $after,
-                        'memo' => "生成AI写真-{$modeText}模式-{$successCount}张 {$settleMark}",
+                        'memo' => "{$modeText}生成-{$successCount}张 {$settleMark}",
                     ]);
                 } else {
                     UserScoreLog::create([
@@ -1359,7 +1469,7 @@ class TaskProcessor
                         'score' => 0,
                         'before' => $currentScore,
                         'after' => $currentScore,
-                        'memo' => "生成AI写真-{$modeText}模式-结算完成 {$settleMark}",
+                        'memo' => "{$modeText}生成-结算完成 {$settleMark}",
                     ]);
                 }
             }

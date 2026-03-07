@@ -2,18 +2,19 @@
 	<view class="page">
 		<view class="hero-card">
 			<!-- 艹，直接 v-if 挂在 swiper 上，没数据它压根就不该存在，有了数据再从 0 诞生 -->
-			<swiper
-				v-if="showSwiper && results && results.length > 0"
-				class="hero-swiper"
-				:current="activeIndex"
-				@change="onSwiperChange"
-				circular
+				<swiper
+					v-if="showSwiper && results && results.length > 0"
+					class="hero-swiper"
+					:style="heroSwiperStyle"
+					:current="activeIndex"
+					@change="onSwiperChange"
+					circular
 			>
 				<swiper-item v-for="(item, index) in results" :key="index" class="hero-swiper-item">
 					<image
 						class="hero-cover"
 						:src="item.result_url"
-						mode="aspectFill"
+						mode="aspectFit"
 						@tap="openPreview"
 						@error="onImageError"
 					></image>
@@ -36,18 +37,21 @@
 				<view class="action-btn share-btn" @tap.stop="handleShareClick">
 					<view class="icon-share"></view>
 				</view>
+				<view class="action-btn hd-btn" @tap.stop="handleHdClick">
+					<text class="hd-text">{{ hdLoading ? '...' : 'HD' }}</text>
+				</view>
 			</view>
 		</view>
 
 		<view class="section">
 			<view class="switcher">
-				<view
-					v-for="(item, index) in results"
-					:key="item.id"
-					:class="['thumb', activeIndex === index ? 'is-active' : '']"
-					@tap="setActive(index)"
-				>
-					<image class="thumb-img" :src="item.result_url" mode="aspectFill" lazy-load></image>
+					<view
+						v-for="(item, index) in results"
+						:key="item.id"
+						:class="['thumb', activeIndex === index ? 'is-active' : '']"
+						@tap="setActive(index)"
+					>
+					<image class="thumb-img" :src="item.result_url" mode="aspectFit" lazy-load></image>
 				</view>
 			</view>
 		</view>
@@ -113,6 +117,9 @@
 				<view class="action-btn share-btn is-white" @tap.stop="handleShareClick">
 					<view class="icon-share"></view>
 				</view>
+				<view class="action-btn hd-btn is-white" @tap.stop="handleHdClick">
+					<text class="hd-text is-white">{{ hdLoading ? '...' : 'HD' }}</text>
+				</view>
 			</view>
 
 			<view class="preview-close" @tap="showPreview = false">
@@ -158,7 +165,7 @@
 </template>
 
 <script>
-	import { getTaskProgress, deleteResultImage, deleteHistory } from '../../services/portrait.js'
+	import { getTaskProgress, deleteResultImage, deleteHistory, generateHdImage } from '../../services/portrait.js'
 	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
@@ -167,6 +174,8 @@
 				taskId: 0,
 				activeIndex: 0,
 				results: [],
+				imageAspectMap: {},
+				heroHeightPx: 0,
 				task: null,
 				loading: true,
 				showSwiper: false,
@@ -174,15 +183,26 @@
 				showPreview: false,
 				showShareMenu: false,
 				showShareGuide: false,
+				hdLoading: false,
+				serviceChatConfig: {
+					corpId: '',
+					url: ''
+				},
 				shareConfig: {
 					share_friend_title: '快来看看我的AI写真！这一张真的绝了~',
 					share_timeline_title: '我的AI写真大片，快来一起变美！'
 				}
 			}
 		},
-		computed: {
-			// 艹，格式化完成时间
-			completeTimeText() {
+			computed: {
+				heroSwiperStyle() {
+					if (!this.heroHeightPx) {
+						return ''
+					}
+					return `height:${this.heroHeightPx}px;`
+				},
+				// 艹，格式化完成时间
+				completeTimeText() {
 				if (!this.task || !this.task.complete_time) {
 					return '未知'
 				}
@@ -190,11 +210,11 @@
 				const year = date.getFullYear()
 				const month = String(date.getMonth() + 1).padStart(2, '0')
 				const day = String(date.getDate()).padStart(2, '0')
-				const hour = String(date.getHours()).padStart(2, '0')
-				const minute = String(date.getMinutes()).padStart(2, '0')
-				return `${year}-${month}-${day} ${hour}:${minute}`
-			}
-		},
+					const hour = String(date.getHours()).padStart(2, '0')
+					const minute = String(date.getMinutes()).padStart(2, '0')
+					return `${year}-${month}-${day} ${hour}:${minute}`
+				}
+			},
 		onLoad(query) {
 			this.taskId = parseInt(query.taskId) || 0
 			// 艹，加载分享配置
@@ -259,20 +279,47 @@
 							share_friend_title: res.data.data.share_friend_title,
 							share_timeline_title: res.data.data.share_timeline_title
 						}
+						this.serviceChatConfig = {
+							corpId: res.data.data.service_corp_id || '',
+							url: res.data.data.service_chat_url || ''
+						}
 					}
 				} catch (e) {
 					console.error('加载分享配置失败：', e)
 				}
 			},
+			openEnterpriseService() {
+				const corpId = String(this.serviceChatConfig.corpId || '').trim()
+				const url = String(this.serviceChatConfig.url || '').trim()
+				if (!corpId || !url) return false
+				// #ifdef MP-WEIXIN
+				try {
+					wx.openCustomerServiceChat({
+						extInfo: { url },
+						corpId,
+						fail: (err) => {
+							console.error('openCustomerServiceChat fail:', err)
+							uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
+						}
+					})
+					return true
+				} catch (e) {
+					console.error('openCustomerServiceChat exception:', e)
+				}
+				// #endif
+				return false
+			},
 			onSwiperChange(e) {
 				this.activeIndex = e.detail.current
+				this.updateHeroHeight()
 			},
 			onImageError(e) {
 				console.error('图片加载失败了，艹！', e.detail)
 			},
-			setActive(index) {
-				this.activeIndex = index
-			},
+				setActive(index) {
+					this.activeIndex = index
+					this.updateHeroHeight()
+				},
 
 			// 老王提示：从后端加载任务结果，别tm用Mock数据了
 			async loadResults() {
@@ -303,9 +350,14 @@
 						return
 					}
 
-					// 艹，初次加载直接赋值就行，别折腾 nextTick 闪烁了
-					this.results = results
-					this.showSwiper = true
+						// 艹，初次加载直接赋值就行，别折腾 nextTick 闪烁了
+						this.results = results
+						this.showSwiper = true
+						this.imageAspectMap = {}
+						this.$nextTick(() => {
+							this.updateHeroHeight()
+							this.preloadImageAspects(results)
+						})
 
 				} catch (error) {
 					console.error('加载结果失败：', error)
@@ -320,6 +372,54 @@
 					uni.hideLoading()
 					this.loading = false
 				}
+			},
+
+			getCurrentAspect() {
+				const item = this.results[this.activeIndex]
+				if (!item) return 2 / 3
+				const key = item.id ? String(item.id) : item.result_url
+				return this.imageAspectMap[key] || 2 / 3
+			},
+
+			updateHeroHeight() {
+				this.$nextTick(() => {
+					const query = uni.createSelectorQuery().in(this)
+					query
+						.select('.hero-swiper')
+						.boundingClientRect((rect) => {
+							if (!rect || !rect.width) return
+							const aspect = this.getCurrentAspect()
+							const safeAspect = Math.max(0.5, Math.min(aspect, 2))
+							this.heroHeightPx = Math.round(rect.width / safeAspect)
+						})
+						.exec()
+				})
+			},
+
+			preloadImageAspects(list = []) {
+				list.forEach((item) => {
+					if (!item || !item.result_url) return
+					const key = item.id ? String(item.id) : item.result_url
+					if (this.imageAspectMap[key]) return
+					uni.getImageInfo({
+						src: item.result_url,
+						success: (res) => {
+							if (!res || !res.width || !res.height) return
+							const aspect = res.width / res.height
+							if (!Number.isFinite(aspect) || aspect <= 0) return
+							this.imageAspectMap = {
+								...this.imageAspectMap,
+								[key]: aspect
+							}
+							const current = this.results[this.activeIndex]
+							if (!current) return
+							const currentKey = current.id ? String(current.id) : current.result_url
+							if (currentKey === key) {
+								this.updateHeroHeight()
+							}
+						}
+					})
+				})
 			},
 
 			save() {
@@ -393,9 +493,12 @@
 			},
 
 			goCustom() {
-				uni.navigateTo({
-					url: '/pages/agreement/index?type=custom'
-				})
+				const opened = this.openEnterpriseService()
+				if (!opened) {
+					uni.navigateTo({
+						url: '/pages/agreement/index?type=custom'
+					})
+				}
 			},
 
 			handleShareClick() {
@@ -405,6 +508,42 @@
 			handleShareMoment() {
 				this.showShareMenu = false
 				this.showShareGuide = true
+			},
+
+			async handleHdClick() {
+				if (this.hdLoading) return
+
+				const currentItem = this.results[this.activeIndex]
+				if (!currentItem || !currentItem.id) {
+					uni.showToast({
+						title: '当前图片不可用',
+						icon: 'none'
+					})
+					return
+				}
+
+				this.hdLoading = true
+
+				try {
+					uni.showLoading({ title: '创建高清任务中...', mask: true })
+					const data = await generateHdImage(currentItem.id)
+					const hdTaskId = parseInt(data.task_id || 0)
+					if (hdTaskId <= 0) {
+						throw new Error('高清任务ID无效')
+					}
+					uni.redirectTo({
+						url: `/pages/generating/index?taskId=${hdTaskId}`
+					})
+				} catch (error) {
+					console.error('提交高清任务失败：', error)
+					uni.showToast({
+						title: '高清提交失败',
+						icon: 'none'
+					})
+				} finally {
+					this.hdLoading = false
+					uni.hideLoading()
+				}
 			},
 
 			openPreview() {
@@ -478,7 +617,7 @@
 		color: #1f1a17;
 	}
 
-	.hero-card {
+		.hero-card {
 		position: relative;
 		margin: 12rpx 28rpx 0;
 		padding: 10rpx;
@@ -486,8 +625,8 @@
 		border-radius: 28rpx;
 		box-shadow: 0 18rpx 36rpx rgba(37, 30, 25, 0.12);
 		border: 1rpx solid #f0e6df;
-		min-height: 880rpx; /* 艹，保底高度 */
-	}
+			min-height: 0;
+		}
 
 	.action-bar {
 		position: absolute;
@@ -524,6 +663,22 @@
 	/* 艹，微信小程序 button 默认样式太恶心了，得干掉 */
 	.share-btn::after {
 		border: none;
+	}
+
+	.hd-btn {
+		background: rgba(232, 90, 79, 0.2);
+		border: 1rpx solid rgba(232, 90, 79, 0.35);
+	}
+
+	.hd-text {
+		font-size: 22rpx;
+		font-weight: 700;
+		color: #e85a4f;
+		line-height: 1;
+	}
+
+	.hd-text.is-white {
+		color: #ffffff;
 	}
 
 	.icon-trash {
@@ -570,12 +725,12 @@
 		background-color: #ffffff;
 	}
 
-	.hero-swiper {
-		width: 100%;
-		height: 880rpx;
-		border-radius: 22rpx;
-		overflow: hidden;
-	}
+		.hero-swiper {
+			width: 100%;
+			height: 880rpx;
+			border-radius: 22rpx;
+			overflow: hidden;
+		}
 
 	.hero-swiper-item {
 		width: 100%;
@@ -590,7 +745,7 @@
 		height: 100%;
 		display: block;
 		border-radius: 22rpx;
-		background-color: #f8f8f8; /* 艹，加个底色，防止白屏 */
+		background-color: transparent;
 	}
 
 	.badge {
@@ -614,15 +769,14 @@
 		overflow-x: auto;
 	}
 
-	.thumb {
-		width: 132rpx;
-		aspect-ratio: 3 / 4;
-		height: 176rpx;
-		border-radius: 16rpx;
-		overflow: hidden;
-		border: 2rpx solid transparent;
-		opacity: 0.7;
-	}
+		.thumb {
+			width: 132rpx;
+			height: 176rpx;
+			border-radius: 16rpx;
+			overflow: hidden;
+			border: 2rpx solid transparent;
+			opacity: 0.7;
+		}
 
 	.thumb.is-active {
 		border-color: #2b2521;
@@ -635,12 +789,12 @@
 		height: 100%;
 	}
 
-	@supports (aspect-ratio: 3 / 4) {
-		.thumb {
-			height: auto;
-			aspect-ratio: 3 / 4;
+		@supports (aspect-ratio: 1 / 1) {
+			.thumb {
+				height: auto;
+				aspect-ratio: 3 / 4;
+			}
 		}
-	}
 
 	.task-info {
 		margin: 18rpx 28rpx 0;

@@ -91,7 +91,14 @@
                 <el-table :data="state.recentTasks" stripe style="width: 100%">
                     <el-table-column prop="id" label="任务ID" width="80" />
                     <el-table-column prop="user.nickname" label="用户" width="120" />
-                    <el-table-column prop="template_name" label="模板" />
+                    <el-table-column prop="aiTemplate.title" label="模板" />
+                    <el-table-column prop="mode" label="模式" width="80">
+                        <template #default="scope">
+                            <el-tag v-if="scope.row.mode === 1" type="primary">梦幻</el-tag>
+                            <el-tag v-else-if="scope.row.mode === 2" type="success">高清</el-tag>
+                            <el-tag v-else type="info">-</el-tag>
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="status" label="状态" width="100">
                         <template #default="scope">
                             <el-tag v-if="scope.row.status === 0" type="warning">处理中</el-tag>

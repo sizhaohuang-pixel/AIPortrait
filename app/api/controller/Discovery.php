@@ -79,6 +79,7 @@ class Discovery extends Frontend
         // 转换图片路径
         foreach ($list as &$item) {
             $item['image_url'] = $this->convertImageUrl($item['image_url']);
+            $item['image_ratio'] = $this->detectAspectRatioByImageUrl($item['image_url']);
             if (empty($item['user']) || !is_array($item['user'])) {
                 $item['user'] = [
                     'id' => 0,
@@ -176,6 +177,7 @@ class Discovery extends Frontend
 
         $note = $note->toArray();
         $note['image_url'] = $this->convertImageUrl($note['image_url']);
+        $note['image_ratio'] = $this->detectAspectRatioByImageUrl($note['image_url']);
         if (empty($note['user']) || !is_array($note['user'])) {
             $note['user'] = [
                 'id' => 0,
@@ -472,6 +474,7 @@ class Discovery extends Frontend
 
         foreach ($list as &$item) {
             $item['image_url'] = $this->convertImageUrl($item['image_url']);
+            $item['image_ratio'] = $this->detectAspectRatioByImageUrl($item['image_url']);
             if (isset($item['user']['avatar'])) {
                 $item['user']['avatar'] = $this->convertImageUrl($item['user']['avatar']);
             }
@@ -532,6 +535,47 @@ class Discovery extends Frontend
         }
 
         return $this->success('删除成功');
+    }
+
+    /**
+     * 根据图片地址判断比例：横图 3:2，竖图 2:3
+     */
+    private function detectAspectRatioByImageUrl($url): string
+    {
+        try {
+            $u = trim(strval($url));
+            if ($u === '') {
+                return '2:3';
+            }
+
+            if (str_starts_with($u, 'http://') || str_starts_with($u, 'https://')) {
+                $context = stream_context_create([
+                    'http' => ['timeout' => 5],
+                    'https' => ['timeout' => 5],
+                ]);
+                $binary = @file_get_contents($u, false, $context);
+                if ($binary === false || $binary === '') {
+                    return '2:3';
+                }
+                $size = @getimagesizefromstring($binary);
+                if (!is_array($size) || empty($size[0]) || empty($size[1])) {
+                    return '2:3';
+                }
+                return intval($size[0]) > intval($size[1]) ? '3:2' : '2:3';
+            }
+
+            $localPath = public_path() . ltrim($u, '/');
+            if (!is_file($localPath)) {
+                return '2:3';
+            }
+            $size = @getimagesize($localPath);
+            if (!is_array($size) || empty($size[0]) || empty($size[1])) {
+                return '2:3';
+            }
+            return intval($size[0]) > intval($size[1]) ? '3:2' : '2:3';
+        } catch (\Throwable $e) {
+            return '2:3';
+        }
     }
 
     /**

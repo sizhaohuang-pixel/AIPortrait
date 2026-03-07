@@ -81,6 +81,28 @@
                     <div class="form-item-tip">用户分享别人的笔记时显示的标题</div>
                 </el-form-item>
 
+                <el-divider content-position="left">企业微信客服配置</el-divider>
+
+                <el-form-item label="企业微信 CorpId" prop="service_corp_id">
+                    <el-input
+                        v-model="state.form.service_corp_id"
+                        placeholder="请输入企业微信 CorpId（示例：wwxxxxxxxx）"
+                        maxlength="64"
+                        show-word-limit
+                    />
+                    <div class="form-item-tip">用于调用 wx.openCustomerServiceChat 的 corpId</div>
+                </el-form-item>
+
+                <el-form-item label="客服会话 URL" prop="service_chat_url">
+                    <el-input
+                        v-model="state.form.service_chat_url"
+                        placeholder="请输入客服会话 URL（https://work.weixin.qq.com/...）"
+                        maxlength="500"
+                        show-word-limit
+                    />
+                    <div class="form-item-tip">用于调用 wx.openCustomerServiceChat 的 extInfo.url</div>
+                </el-form-item>
+
                 <el-form-item>
                     <el-button type="primary" @click="onSubmit" :loading="state.submitting">保存配置</el-button>
                     <el-button @click="onReset">重置</el-button>
@@ -111,6 +133,8 @@ const state = reactive({
         home_share_timeline_title: '',
         discovery_share_title: '',
         note_detail_share_title: '',
+        service_corp_id: '',
+        service_chat_url: '',
     },
     originalForm: {} as any,
     rules: {
@@ -120,6 +144,8 @@ const state = reactive({
         home_share_timeline_title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
         discovery_share_title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
         note_detail_share_title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+        service_corp_id: [{ required: true, message: '请输入企业微信 CorpId', trigger: 'blur' }],
+        service_chat_url: [{ required: true, message: '请输入客服会话 URL', trigger: 'blur' }],
     } as FormRules,
 })
 
@@ -140,6 +166,8 @@ const getConfig = async () => {
             state.form.home_share_timeline_title = configs.home_share_timeline_title?.value || 'AI写真：一键生成你的艺术大片'
             state.form.discovery_share_title = configs.discovery_share_title?.value || '发现更多惊艳的AI写真作品'
             state.form.note_detail_share_title = configs.note_detail_share_title?.value || '这张AI写真真的绝了，快来看看！'
+            state.form.service_corp_id = configs.service_corp_id?.value || ''
+            state.form.service_chat_url = configs.service_chat_url?.value || ''
 
             // 艹，保存原始数据用于重置
             state.originalForm = { ...state.form }
