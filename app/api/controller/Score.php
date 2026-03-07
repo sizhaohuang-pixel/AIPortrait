@@ -644,6 +644,7 @@ class Score extends Frontend
         $noteDetailShareTitle = ScoreConfig::getConfigValue('note_detail_share_title', '这张AI写真真的绝了，快来看看！');
         $serviceCorpId = ScoreConfig::getConfigValue('service_corp_id', '');
         $serviceChatUrl = ScoreConfig::getConfigValue('service_chat_url', '');
+        $serviceBubbleTexts = ScoreConfig::getConfigValue('service_bubble_texts', '');
 
         $imageCount = 4;
         $mode1Cost = intval($generateCost * $imageCount);
@@ -662,6 +663,7 @@ class Score extends Frontend
             'note_detail_share_title' => $noteDetailShareTitle,
             'service_corp_id' => $serviceCorpId,
             'service_chat_url' => $serviceChatUrl,
+            'service_bubble_texts' => $serviceBubbleTexts,
         ]);
     }
 }

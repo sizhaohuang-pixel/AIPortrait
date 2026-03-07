@@ -63,7 +63,8 @@ class Config extends Backend
                     'discovery_share_title',
                     'note_detail_share_title',
                     'service_corp_id',
-                    'service_chat_url'
+                    'service_chat_url',
+                    'service_bubble_texts'
                 ];
 
                 // 艹，只处理允许保存的 Key
