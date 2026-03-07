@@ -6,7 +6,7 @@
 			:style="serviceBubbleStyle"
 			@tap.stop="hideBubble"
 		>
-			<text>{{ bubbleText }}</text>
+			<text>{{ currentBubbleText || bubbleText }}</text>
 		</view>
 		<movable-area class="service-movable-area">
 			<movable-view
@@ -73,6 +73,7 @@
 		},
 		data() {
 			return {
+				currentBubbleText: '',
 				showServiceBubble: false,
 				serviceBubbleTimer: null,
 				serviceX: 0,
@@ -125,6 +126,15 @@
 						const data = res.data.data || {}
 						this.loadedCorpId = (data.service_corp_id || '').trim()
 						this.loadedServiceUrl = (data.service_chat_url || '').trim()
+
+						const textsStr = (data.service_bubble_texts || '').trim();
+						if (textsStr) {
+							const lines = textsStr.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+							if (lines.length > 0) {
+								const randomIndex = Math.floor(Math.random() * lines.length);
+								this.currentBubbleText = lines[randomIndex];
+							}
+						}
 					}
 				} catch (e) {
 					console.error('loadServiceChatConfig fail:', e)
