@@ -61,7 +61,7 @@ export function requireLogin(options = {}) {
 
 	const {
 		title = '提示',
-		content = '请先登录',
+		content = '请退出重新登录',
 		onCancel = null
 	} = options
 

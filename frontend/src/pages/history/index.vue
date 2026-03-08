@@ -73,7 +73,7 @@
 			}
 
 			this.loadHistory()
-			// 艹，启动轮询
+			// 启动轮询
 			this.startPolling()
 		},
 		onReachBottom() {
@@ -84,36 +84,42 @@
 			this.loadHistory(false, true)
 		},
 		onHide() {
-			// 艹，页面隐藏时停止轮询
+			// 页面隐藏时停止轮询
 			this.stopPolling()
 		},
 		onUnload() {
-			// 艹，页面卸载时停止轮询
+			// 页面卸载时停止轮询
 			this.stopPolling()
 		},
+		onPullDownRefresh() {
+			this.page = 1
+			this.loadHistory(false, false).then(() => {
+				uni.stopPullDownRefresh()
+			})
+		},
 		methods: {
-			// 艹，启动轮询
+			// 启动轮询
 			startPolling() {
-				// 艹，先清除旧的定时器
+				// 先清除旧的定时器
 				this.stopPolling()
 
-				// 艹，每3秒检查一次
+				// 每3秒检查一次
 				this.pollingTimer = setInterval(() => {
-					// 艹，检查是否有生成中的任务
+					// 检查是否有生成中的任务
 					const hasGenerating = this.history.some(item => this.isGeneratingStatus(item.status))
 					if (!hasGenerating) {
-						// 艹，没有生成中的任务，停止轮询
+						// 没有生成中的任务，停止轮询
 						this.stopPolling()
 						return
 					}
 					if (!this.requesting) {
-						// 艹，静默刷新（不显示loading）
+						// 静默刷新（不显示loading）
 						this.loadHistory(true)
 					}
 				}, 3000)
 			},
 
-			// 艹，停止轮询
+			// 停止轮询
 			stopPolling() {
 				if (this.pollingTimer) {
 					clearInterval(this.pollingTimer)
@@ -129,7 +135,7 @@
 
 				try {
 					this.requesting = true
-					// 艹，静默刷新时不显示loading
+					// 静默刷新时不显示loading
 					if (!silent && this.history.length === 0) {
 						this.loading = true
 					}
@@ -158,7 +164,7 @@
 							cover = item.template_cover
 						}
 
-						// 艹，处理图片 URL，如果是相对路径则拼接域名
+						// 处理图片 URL，如果是相对路径则拼接域名
 						if (cover && cover.startsWith('/') && !cover.startsWith('http')) {
 							cover = API_CONFIG.baseURL + cover
 						}
@@ -195,7 +201,7 @@
 					}
 					this.total = data.total || 0
 
-					// 艹，如果有生成中的任务，确保轮询在运行
+					// 如果有生成中的任务，确保轮询在运行
 					const hasGenerating = next.some(item => this.isGeneratingStatus(item.status))
 					if (hasGenerating && !this.pollingTimer) {
 						this.startPolling()
@@ -261,7 +267,7 @@
 				})
 			},
 
-			// 艹，确认删除
+			// 确认删除
 			deleteItem(item) {
 				const self = this
 				uni.showModal({

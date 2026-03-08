@@ -238,34 +238,52 @@
 			}
 		},
 		methods: {
+			normalizeCorpId(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			normalizeServiceUrl(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			getServiceChatFailTip(err) {
+				const errCode = Number(err && err.errCode ? err.errCode : 0)
+				const errMsg = err && err.errMsg ? String(err.errMsg) : ''
+				if (errCode === 6 || errMsg.includes('check failed')) {
+					return '企微客服配置校验失败，请联系管理员'
+				}
+				return '暂时无法打开企业客服'
+			},
 			async loadServiceChatConfig() {
 				try {
 					const data = await get('/api/score/config')
 					this.serviceChatConfig = {
-						corpId: data.service_corp_id || '',
-						url: data.service_chat_url || ''
+						corpId: this.normalizeCorpId(data.service_corp_id || ''),
+						url: this.normalizeServiceUrl(data.service_chat_url || '')
 					}
 				} catch (error) {
 					console.error('获取客服配置失败:', error)
 				}
 			},
 			openEnterpriseService() {
-				const corpId = String(this.serviceChatConfig.corpId || '').trim()
-				const url = String(this.serviceChatConfig.url || '').trim()
-				if (!corpId || !url) return false
+				const corpId = this.normalizeCorpId(this.serviceChatConfig.corpId || '')
+				const url = this.normalizeServiceUrl(this.serviceChatConfig.url || '')
+				if (!corpId || !url) {
+					uni.showToast({ title: '客服配置缺失，请稍后再试', icon: 'none' })
+					return false
+				}
 				// #ifdef MP-WEIXIN
 				try {
 					wx.openCustomerServiceChat({
 						extInfo: { url },
 						corpId,
 						fail: (err) => {
-							console.error('openCustomerServiceChat fail:', err)
-							uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
+							console.warn('openCustomerServiceChat fail:', err)
+							uni.showToast({ title: this.getServiceChatFailTip(err), icon: 'none' })
 						}
 					})
 					return true
 				} catch (e) {
-					console.error('openCustomerServiceChat exception:', e)
+					console.warn('openCustomerServiceChat exception:', e)
+					uni.showToast({ title: '企业客服调用异常，请稍后再试', icon: 'none' })
 				}
 				// #endif
 				return false
@@ -344,8 +362,8 @@
 			},
 			goAgreement(type) {
 				if (type === 'custom') {
-					const opened = this.openEnterpriseService()
-					if (opened) return
+					this.openEnterpriseService()
+					return
 				}
 				uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
 			},

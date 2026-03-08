@@ -100,6 +100,7 @@
 	import FloatingServiceButton from '../../components/floating-service-button.vue'
 	import { get } from '../../services/request.js'
 	import { API_CONFIG } from '../../services/config.js'
+	import { parseInviterId } from '../../utils/invite.js'
 
 	export default {
 		components: {
@@ -134,7 +135,7 @@
 		onLoad(query) {
 			this.captureInviterId(query)
 			this.loadData()
-			// 艹，加载分享配置
+			// 加载分享配置
 			this.loadShareConfig()
 		},
 		onShow() {
@@ -193,7 +194,7 @@
 				}
 				return []
 			},
-			// 艹，处理 Banner 图片 URL，如果是相对路径则拼接域名
+			// 处理 Banner 图片 URL，如果是相对路径则拼接域名
 			processedBanners() {
 				return this.banners.map(banner => {
 					return {
@@ -205,20 +206,7 @@
 		},
 			methods: {
 			captureInviterId(query = {}) {
-				let inviterId = Number(query.inviter_id || 0)
-				const scene = query.scene ? decodeURIComponent(query.scene) : ''
-				if (!inviterId && scene) {
-					const pairs = String(scene).split('&')
-					pairs.forEach(pair => {
-						const [k, v] = pair.split('=')
-						if (k === 'inviter_id') {
-							inviterId = Number(v || 0)
-						}
-					})
-				}
-				if (inviterId > 0) {
-					uni.setStorageSync('pending_inviter_id', inviterId)
-				}
+				parseInviterId(query)
 			},
 				formattedUrl(url) {
 					if (!url) return ''
@@ -315,7 +303,7 @@
 			goDetail(templateId) {
 				uni.navigateTo({ url: `/pages/template-detail/index?templateId=${templateId}` })
 			},
-			// 艹，加载分享配置
+			// 加载分享配置
 			async loadShareConfig() {
 				try {
 					const res = await uni.request({
@@ -410,15 +398,15 @@
 	}
 
 	.filter-item {
-		flex: 1; /* 艹！让四个按钮平分空间 */
+		flex: 1; /* 让四个按钮平分空间 */
 		display: flex;
 		align-items: center;
-		justify-content: center; /* 艹！文字和箭头水平居中 */
+		justify-content: center; /* 文字和箭头水平居中 */
 		gap: 6rpx;
 		font-size: 24rpx;
 		color: #6a5f58;
-		padding: 12rpx 10rpx; /* 艹！左右内边距调小点，给平分腾地方 */
-		margin: 0 6rpx; /* 艹！用外边距来控制按钮间的空隙 */
+		padding: 12rpx 10rpx; /* 左右内边距适当缩小 */
+		margin: 0 6rpx; /* 外边距控制按钮间的空隙 */
 		background: rgba(255, 255, 255, 0.6);
 		border-radius: 12rpx;
 		transition: all 0.2s;
@@ -545,7 +533,7 @@
 	.dropdown-main {
 		background: rgba(255, 255, 255, 0.98);
 		border-radius: 0 0 44rpx 44rpx;
-		padding: 30rpx 40rpx 50rpx; /* 艹！给标签留出空位 */
+		padding: 30rpx 40rpx 50rpx; /* 预留标签空间 */
 		box-shadow: 0 30rpx 60rpx rgba(37, 30, 25, 0.1);
 		animation: slideDown 0.3s cubic-bezier(0.23, 1, 0.32, 1);
 		border-top: 1rpx solid rgba(0, 0, 0, 0.05);
@@ -555,10 +543,10 @@
 		max-height: 50vh;
 	}
 
-	/* 艹！标签网格容器 */
+	/* 标签网格容器 */
 	.dropdown-grid {
 		display: grid;
-		grid-template-columns: repeat(4, 1fr); /* 艹！一行四个 */
+		grid-template-columns: repeat(4, 1fr); /* 一行四个 */
 		gap: 20rpx;
 	}
 
@@ -583,7 +571,7 @@
 		border-color: rgba(232, 90, 79, 0.3);
 	}
 
-	/* 艹！标签模式下不需要勾选图标了 */
+	/* 标签模式下隐藏勾选图标 */
 	.check-icon {
 		display: none;
 	}

@@ -1,6 +1,6 @@
 /**
  * AI写真相关接口
- * 老王提示：这个SB文件封装了所有AI写真相关的API调用
+ * 封装了所有AI写真相关的API调用
  */
 
 import { get, post, del } from './request.js'
@@ -28,7 +28,6 @@ export function getTemplates(styleId = 0) {
  * 获取模板详情
  * @param {Number} id 模板ID
  * @returns {Promise}
- * 老王提示：改用查询参数方式，别tm用路径参数了
  */
 export function getTemplateDetail(id) {
 	return get(API_PATHS.portrait.template, { id }, { needToken: false })
@@ -50,7 +49,6 @@ export function generatePortrait(data) {
  * 查询任务进度
  * @param {Number} taskId 任务ID
  * @returns {Promise}
- * 老王提示：改用查询参数方式，别tm用路径参数了
  */
 export function getTaskProgress(taskId) {
 	return get(API_PATHS.portrait.task, { id: taskId })
@@ -70,7 +68,6 @@ export function getHistory(page = 1, limit = 10) {
  * 删除历史记录
  * @param {Number} id 任务ID
  * @returns {Promise}
- * 老王提示：改用 post 方式，绕过服务器 DELETE 限制
  */
 export function deleteHistory(id) {
 	return post(API_PATHS.portrait.deleteHistory, { id })
@@ -80,7 +77,6 @@ export function deleteHistory(id) {
  * 删除单张结果图片
  * @param {Number} id 图片ID
  * @returns {Promise}
- * 老王提示：改用 post 方式，绕过服务器 DELETE 限制
  */
 export function deleteResultImage(id) {
 	return post(API_PATHS.portrait.deleteResult, { id })

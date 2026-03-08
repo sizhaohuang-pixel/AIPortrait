@@ -110,6 +110,17 @@ class Api extends BaseController
         $type = $type ?: $this->responseType;
         $code = $header['statusCode'] ?? 200;
 
+        // 统一 JSON 编码和响应头，规避部分客户端/终端中文乱码问题
+        if (in_array($type, ['json', 'jsonp'], true)) {
+            $lowerHeader = array_change_key_case($header, CASE_LOWER);
+            if (!isset($lowerHeader['content-type'])) {
+                $header['Content-Type'] = 'application/json; charset=utf-8';
+            }
+            if (!array_key_exists('json_encode_param', $options)) {
+                $options['json_encode_param'] = 0;
+            }
+        }
+
         $response = Response::create($result, $type, $code)->header($header)->options($options);
         throw new HttpResponseException($response);
     }

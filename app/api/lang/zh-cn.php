@@ -39,7 +39,7 @@ return [
     'You are not logged in'                                                               => '你没有登录',
     'Unknown operation'                                                                   => '未知操作',
     'No action available, please contact the administrator~'                              => '没有可用操作，请联系管理员~',
-    'Please login first'                                                                  => '请先登录！',
+    'Please login first'                                                                  => '请退出重新登录！',
     'You have no permission'                                                              => '没有权限操作！',
     'Parameter error'                                                                     => '参数错误!',
     'Token expiration'                                                                    => '登录态过期，请重新登录！',

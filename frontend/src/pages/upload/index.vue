@@ -12,7 +12,7 @@
 					</view>
 				</view>
 				<view class="example-item">
-					<image class="example-img" src="/static/images/2.jpg" mode="aspectFill"></image>
+					<image class="example-img" src="/static/images/002.jpg" mode="aspectFill"></image>
 					<view class="example-label">
 						<text class="icon-check">✓</text>
 						<text>可美颜</text>
@@ -65,13 +65,16 @@
 				</view>
 				<view class="notice-content">
 					<text class="notice-line">
-						<text class="notice-strong">上传图片 = 图片质量。</text>
+						<text class="notice-strong">【上传图片=出图质量】</text>
 					</text>
 					<text class="notice-line">
-						出图时会高还原本人照片的发型、脸型、五官、肤色等细节，所以选择一张好照片很重要。
+						出图会高还原上传底图的表情、发型、肤色等细节
 					</text>
 					<text class="notice-line">
-						请不要再低调啦，上传那张珍藏已久的美照，开启一段神奇的 AI 写真之旅吧！
+						好照片出片更惊艳！（可以美颜）
+					</text>
+					<text class="notice-line">
+						别低调，上传你的珍藏美照，开启神奇 AI 写真之旅！
 					</text>
 				</view>
 			</view>
@@ -107,11 +110,11 @@
 				subTemplateId: 0,
 				subTemplateName: '',
 				title: '',
-				maxFaceCount: 1,  // 艹，最大人脸数量，从后端获取
+				maxFaceCount: 1,  // 最大人脸数量，从后端获取
 				imageUrls: [],  // 本地临时路径
 				uploadedUrls: [],  // 已上传的 RunningHub URL
-				uploading: false,  // 艹，是否正在上传
-				uploadProgress: 0,  // 艹，上传进度（已上传数量）
+				uploading: false,  // 是否正在上传
+				uploadProgress: 0,  // 上传进度（已上传数量）
 				serviceChatConfig: {
 					corpId: '',
 					url: ''
@@ -120,7 +123,7 @@
 		},
 		computed: {
 			canSubmit() {
-				// 艹，必须所有图片都上传完成才能提交
+				// 必须所有图片都上传完成才能提交
 				return Boolean(this.imageUrls.length && this.uploadedUrls.length === this.imageUrls.length && !this.uploading)
 			}
 		},
@@ -130,11 +133,25 @@
 			this.subTemplateName = decodeURIComponent(query.subTemplateName || '')
 			this.title = decodeURIComponent(query.title || '')
 
-			// 艹，加载模板信息，获取人脸数量限制
+			// 加载模板信息，获取人脸数量限制
 			this.loadTemplateInfo()
 			this.loadServiceChatConfig()
 		},
 		methods: {
+			normalizeCorpId(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			normalizeServiceUrl(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			getServiceChatFailTip(err) {
+				const errCode = Number(err && err.errCode ? err.errCode : 0)
+				const errMsg = err && err.errMsg ? String(err.errMsg) : ''
+				if (errCode === 6 || errMsg.includes('check failed')) {
+					return '企微客服配置校验失败，请联系管理员'
+				}
+				return '暂时无法打开企业客服'
+			},
 			async loadServiceChatConfig() {
 				try {
 					const res = await uni.request({
@@ -144,15 +161,15 @@
 					if (res.statusCode === 200 && res.data && res.data.code === 1) {
 						const data = res.data.data || {}
 						this.serviceChatConfig = {
-							corpId: data.service_corp_id || '',
-							url: data.service_chat_url || ''
+							corpId: this.normalizeCorpId(data.service_corp_id || ''),
+							url: this.normalizeServiceUrl(data.service_chat_url || '')
 						}
 					}
 				} catch (e) {
 					console.error('加载客服配置失败：', e)
 				}
 			},
-			// 艹，加载模板信息
+			// 加载模板信息
 			async loadTemplateInfo() {
 				try {
 					const res = await uni.request({
@@ -167,7 +184,7 @@
 					}
 				} catch (error) {
 					console.error('加载模板信息失败：', error)
-					// 艹，加载失败使用默认值1
+					// 加载失败使用默认值1
 					this.maxFaceCount = 1
 				}
 			},
@@ -188,10 +205,10 @@
 					sourceType: ['album', 'camera'],
 					success: function(res) {
 						const newImages = res.tempFilePaths || []
-						// 艹，添加新图片到列表
+						// 添加新图片到列表
 						self.imageUrls = self.dedupeImages(self.imageUrls.concat(newImages))
 
-						// 艹，立即上传新选择的图片
+						// 立即上传新选择的图片
 						self.uploadNewImages(newImages)
 					}
 				})
@@ -201,26 +218,27 @@
 			async uploadNewImages(newImages) {
 				const self = this
 				self.uploading = true
+				let batchAllSuccess = true
 
-				// 艹，显示上传提示
+				// 显示上传提示
 				uni.showLoading({
 					title: '上传中...',
 					mask: true
 				})
 
 				try {
-					// 艹，逐个上传图片
+					// 逐个上传图片
 					for (let i = 0; i < newImages.length; i++) {
 						const filePath = newImages[i]
 
-						// 艹，更新上传进度提示
+						// 更新上传进度提示
 						uni.showLoading({
 							title: `上传中 ${self.uploadProgress + 1}/${self.imageUrls.length}`,
 							mask: true
 						})
 
 						try {
-							// 艹，上传到 RunningHub
+							// 上传到服务端或云存储
 							const url = await upload(filePath)
 							self.uploadedUrls.push(url)
 							self.uploadProgress++
@@ -228,13 +246,15 @@
 							console.log('上传成功：', url)
 						} catch (error) {
 							console.error('上传失败：', error)
-							// 艹，上传失败，从列表中移除这张图片
+							batchAllSuccess = false
+							// 上传失败，从列表中移除这张图片
 							const index = self.imageUrls.indexOf(filePath)
 							if (index > -1) {
 								self.imageUrls.splice(index, 1)
 							}
+							const reason = (error && (error.msg || error.message || error.errMsg)) ? String(error.msg || error.message || error.errMsg) : '部分图片上传失败'
 							uni.showToast({
-								title: '部分图片上传失败',
+								title: reason,
 								icon: 'none'
 							})
 						}
@@ -242,8 +262,8 @@
 
 					uni.hideLoading()
 
-					// 艹，所有图片上传完成
-					if (self.uploadedUrls.length === self.imageUrls.length) {
+					// 所有图片上传完成
+					if (batchAllSuccess && self.uploadedUrls.length === self.imageUrls.length) {
 						uni.showToast({
 							title: '上传完成',
 							icon: 'success',
@@ -283,7 +303,7 @@
 					content: '确认删除这张照片吗？',
 					success: function(res) {
 						if (res.confirm) {
-							// 艹，同时删除本地路径和已上传的 URL
+							// 同时删除本地路径和已上传的 URL
 							self.imageUrls.splice(index, 1)
 							self.uploadedUrls.splice(index, 1)
 							self.uploadProgress = self.uploadedUrls.length
@@ -327,12 +347,11 @@
 						mask: true
 					})
 
-					// 艹，直接使用已上传的 RunningHub URL
-						const data = await generatePortrait({
-							template_id: this.templateId,
-							sub_template_id: this.subTemplateId,
-							images: this.uploadedUrls  // 艹，使用已上传的 RunningHub URL
-						})
+					const data = await generatePortrait({
+						template_id: this.templateId,
+						sub_template_id: this.subTemplateId,
+						images: this.uploadedUrls
+					})
 
 					uni.hideLoading()
 
@@ -344,7 +363,7 @@
 					console.error('提交失败：', error)
 					uni.hideLoading()
 
-					// 艹，处理积分不足的错误
+					// 处理积分不足的错误
 					if (error.msg && error.msg.includes('积分不足')) {
 						uni.showModal({
 							title: '积分不足',
@@ -353,7 +372,6 @@
 							cancelText: '取消',
 							success: function(res) {
 								if (res.confirm) {
-									// 艹，跳转到充值页面
 									uni.navigateTo({
 										url: '/pages/score/recharge'
 									})
@@ -361,7 +379,7 @@
 							}
 						})
 					} else {
-						// 艹，其他错误显示具体的错误信息
+						// 其他错误显示具体的错误信息
 						uni.showToast({
 							title: error.msg || '提交失败，请重试',
 							icon: 'none',
@@ -374,29 +392,27 @@
 			},
 			goCustomerService() {
 				// #ifdef MP-WEIXIN
-				const corpId = (this.serviceChatConfig.corpId || '').trim()
-				const url = (this.serviceChatConfig.url || '').trim()
+				const corpId = this.normalizeCorpId(this.serviceChatConfig.corpId || '')
+				const url = this.normalizeServiceUrl(this.serviceChatConfig.url || '')
 				if (corpId && url) {
 					try {
 						wx.openCustomerServiceChat({
 							extInfo: { url },
 							corpId,
 							fail: (err) => {
-								console.error('openCustomerServiceChat fail:', err)
-								uni.navigateTo({
-									url: '/pages/agreement/index?type=custom'
-								})
+								console.warn('openCustomerServiceChat fail:', err)
+								uni.showToast({ title: this.getServiceChatFailTip(err), icon: 'none' })
 							}
 						})
 						return
 					} catch (e) {
-						console.error('openCustomerServiceChat exception:', e)
+						console.warn('openCustomerServiceChat exception:', e)
+						uni.showToast({ title: '企业客服调用异常，请稍后再试', icon: 'none' })
 					}
+				} else {
+					uni.showToast({ title: '客服配置缺失，请稍后再试', icon: 'none' })
 				}
 				// #endif
-				uni.navigateTo({
-					url: '/pages/agreement/index?type=custom'
-				})
 			}
 		}
 	}
@@ -589,7 +605,7 @@
 		font-size: 22rpx;
 		line-height: 1.5;
 		color: #8f6e5f;
-		text-align: center;
+		text-align: left;
 	}
 
 	.legal-star {

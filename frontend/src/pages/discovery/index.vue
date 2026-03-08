@@ -14,8 +14,11 @@
 
 		<view class="list-container" v-if="list.length > 0">
 			<view class="column">
-				<view v-for="item in leftList" :key="item.id" class="card" @tap="goDetail(item.id)">
-					<image :class="['cover', getRatioClass(item.image_ratio)]" :src="item.image_url" mode="aspectFill" lazy-load></image>
+				<view v-for="(item, index) in leftList" :key="item.id" class="card" :style="{ animationDelay: (index % 10) * 0.05 + 's' }" @tap="goDetail(item.id)">
+					<view class="image-wrapper">
+						<image :class="['cover', getRatioClass(item.image_ratio), item.loaded ? 'is-loaded' : '']" :src="item.image_url" mode="aspectFill" lazy-load @load="onImageLoad(item)"></image>
+						<view class="image-skeleton" v-if="!item.loaded"></view>
+					</view>
 					<view class="info">
 						<text class="content">{{ item.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
@@ -38,8 +41,11 @@
 				</view>
 			</view>
 			<view class="column">
-				<view v-for="item in rightList" :key="item.id" class="card" @tap="goDetail(item.id)">
-					<image :class="['cover', getRatioClass(item.image_ratio)]" :src="item.image_url" mode="aspectFill" lazy-load></image>
+				<view v-for="(item, index) in rightList" :key="item.id" class="card" :style="{ animationDelay: (index % 10) * 0.05 + 's' }" @tap="goDetail(item.id)">
+					<view class="image-wrapper">
+						<image :class="['cover', getRatioClass(item.image_ratio), item.loaded ? 'is-loaded' : '']" :src="item.image_url" mode="aspectFill" lazy-load @load="onImageLoad(item)"></image>
+						<view class="image-skeleton" v-if="!item.loaded"></view>
+					</view>
 					<view class="info">
 						<text class="content">{{ item.content || '分享一张超赞的AI写真~' }}</text>
 						<view class="user-row">
@@ -63,10 +69,17 @@
 			</view>
 		</view>
 
-		<view v-if="loading && list.length === 0" class="loading-state">
-			<view class="loading-spinner"></view>
-			<text class="loading-text">加载中...</text>
+		<!-- 初次加载骨架屏 -->
+		<view v-if="loading && list.length === 0" class="skeleton-wrapper">
+			<SkeletonLoader variant="grid" />
 		</view>
+
+		<!-- 加载更多动画 -->
+		<view v-if="loading && list.length > 0" class="loading-more">
+			<view class="spinner"></view>
+			<text>正在加载更多发现...</text>
+		</view>
+
 		<view v-if="!loading && list.length === 0" class="empty-state">
 			<view class="empty-icon"></view>
 			<text class="empty-text">{{ my ? '你还没有发布过笔记呢' : '暂无发现，快去生成你的作品吧！' }}</text>
@@ -78,13 +91,15 @@
 </template>
 
 <script>
+	import SkeletonLoader from '../../components/SkeletonLoader.vue'
 	import FloatingServiceButton from '../../components/floating-service-button.vue'
 	import { get } from '../../services/request.js'
 	import { API_CONFIG } from '../../services/config.js'
 
 	export default {
 		components: {
-			'floating-service-button': FloatingServiceButton
+			'floating-service-button': FloatingServiceButton,
+			SkeletonLoader
 		},
 		data() {
 			return {
@@ -219,6 +234,9 @@
 				const cardGap = 20
 				return imageHeight + infoHeight + cardGap
 			},
+			onImageLoad(item) {
+				item.loaded = true;
+			},
 			normalizeRatio(ratio) {
 				return ratio === '3:2' ? '3:2' : '2:3'
 			},
@@ -325,12 +343,18 @@
 		border-radius: 20rpx;
 		overflow: hidden;
 		box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
-		animation: fadeIn 0.3s ease-in;
+		animation: slideUpFade 0.5s cubic-bezier(0.23, 1, 0.32, 1) backwards;
 	}
 
-	@keyframes fadeIn {
-		from { opacity: 0; transform: translateY(20rpx); }
-		to { opacity: 1; transform: translateY(0); }
+	@keyframes slideUpFade {
+		from { 
+			opacity: 0;
+			transform: translateY(40rpx);
+		}
+		to { 
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	@keyframes spin {
@@ -338,11 +362,38 @@
 		to { transform: rotate(360deg); }
 	}
 
+	.image-wrapper {
+		width: 100%;
+		position: relative;
+	}
+
 	.cover {
 		width: 100%;
 		height: auto;
 		display: block;
 		background: #eee;
+		opacity: 0;
+		transition: opacity 0.4s ease-in-out;
+	}
+
+	.cover.is-loaded {
+		opacity: 1;
+	}
+
+	.image-skeleton {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(90deg, #f5f5f5 25%, #e8e8e8 50%, #f5f5f5 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.5s infinite linear;
+	}
+
+	@keyframes shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
 	}
 
 	.cover.ratio-portrait {
@@ -507,6 +558,29 @@
 
 	.no-more::before { left: 200rpx; }
 	.no-more::after { right: 200rpx; }
+
+	.skeleton-wrapper {
+		margin-top: 20rpx;
+	}
+
+	.loading-more {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 30rpx 0 60rpx;
+		font-size: 24rpx;
+		color: #999;
+	}
+
+	.spinner {
+		width: 30rpx;
+		height: 30rpx;
+		border: 4rpx solid #f3f3f3;
+		border-top: 4rpx solid #2b2521;
+		border-radius: 50%;
+		margin-right: 12rpx;
+		animation: spin 1s linear infinite;
+	}
 </style>
 
 

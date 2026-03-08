@@ -1,21 +1,25 @@
 /**
  * API配置文件
- * 老王提示：这个配置文件管理API的基础URL和超时时间
- * 艹，UniApp 不支持 .env 文件，需要直接在这里配置生产环境URL！
+ * 此文件用于管理API的基础URL、超时时间及状态码等配置
  */
 
 // 是否使用 Mock 数据（开发环境临时使用，等后端配置好后改为 false）
 export const USE_MOCK = false
 
-// ==================== 重要配置 ====================
-// 艹，生产环境的 API 地址，打包前记得改这里！
+// 生产环境的 API 地址，打包前请确保配置正确
 const PRODUCTION_BASE_URL = 'https://www.bbhttp.com'
-// ================================================
+
+// 业务状态码枚举
+export const HTTP_STATUS = {
+	SUCCESS: 1,
+	UNAUTHORIZED: 401,
+	CONFLICT: 409,
+	ALREADY_LOGGED_IN: 303
+}
 
 // API基础配置
 export const API_CONFIG = {
 	// 基础URL - 根据编译环境自动切换
-	// 艹，老王回归稳健版：用最原始的 process.env，别搞那些花里胡哨的
 	baseURL: process.env.NODE_ENV === 'development'
 		? 'http://localhost:8000'
 		: PRODUCTION_BASE_URL,
@@ -37,11 +41,11 @@ export const API_PATHS = {
 		template: '/api/portrait/template',       // 获取模板详情
 		generate: '/api/portrait/generate',       // 创建生成任务
 		task: '/api/portrait/task',               // 查询任务进度
-		share: '/api/portrait/share',              // 艹，新增分享接口路径
-		hdEnhance: '/api/portrait/hdEnhance',      // 结果图高清增强
-		deleteResult: '/api/portrait/deleteResult', // 艹，试下驼峰路径，看服务器认不认
+		share: '/api/portrait/share',             // 新增分享接口路径
+		hdEnhance: '/api/portrait/hdEnhance',     // 结果图高清增强
+		deleteResult: '/api/portrait/deleteResult', // 删除结果图
 		history: '/api/portrait/history',         // 获取历史记录
-		deleteHistory: '/api/portrait/deleteHistory', // 艹，试下驼峰路径，看服务器认不认
+		deleteHistory: '/api/portrait/deleteHistory', // 删除历史记录
 	},
 
 	// 文件上传接口

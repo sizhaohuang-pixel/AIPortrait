@@ -116,6 +116,23 @@
 			this.clearBubbleTimer()
 		},
 		methods: {
+			normalizeCorpId(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			normalizeServiceUrl(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			getServiceChatFailTip(err) {
+				const errCode = Number(err && err.errCode ? err.errCode : 0)
+				const errMsg = err && err.errMsg ? String(err.errMsg) : ''
+				if (errCode === 6 || errMsg.includes('check failed')) {
+					return '企微客服配置校验失败，请联系管理员'
+				}
+				if (errMsg.includes('permission') || errMsg.includes('private')) {
+					return '当前环境暂不支持企微客服'
+				}
+				return '暂时无法打开企业客服'
+			},
 			async loadServiceChatConfig() {
 				try {
 					const res = await uni.request({
@@ -124,8 +141,8 @@
 					})
 					if (res.statusCode === 200 && res.data && res.data.code === 1) {
 						const data = res.data.data || {}
-						this.loadedCorpId = (data.service_corp_id || '').trim()
-						this.loadedServiceUrl = (data.service_chat_url || '').trim()
+						this.loadedCorpId = this.normalizeCorpId(data.service_corp_id || '')
+						this.loadedServiceUrl = this.normalizeServiceUrl(data.service_chat_url || '')
 
 						const textsStr = (data.service_bubble_texts || '').trim();
 						if (textsStr) {
@@ -143,57 +160,29 @@
 			goCustomerService() {
 				this.clearBubbleTimer()
 				this.showServiceBubble = false
-				const opened = this.openWecomServiceChat()
-				if (!opened) {
-					uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
-				}
+				this.openWecomServiceChat()
 			},
 			openWecomServiceChat() {
 				// #ifdef MP-WEIXIN
-				const corpId = (this.corpId || this.loadedCorpId || '').trim()
-				const url = (this.serviceUrl || this.loadedServiceUrl || '').trim()
+				const corpId = this.normalizeCorpId(this.corpId || this.loadedCorpId || '')
+				const url = this.normalizeServiceUrl(this.serviceUrl || this.loadedServiceUrl || '')
 				if (!corpId || !url) {
+					uni.showToast({ title: '客服配置缺失，请稍后再试', icon: 'none' })
 					return false
 				}
 				try {
-					let settled = false
-					const fallbackToCustomPage = () => {
-						if (settled) return
-						settled = true
-						uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
-					}
-					const timer = setTimeout(() => {
-						fallbackToCustomPage()
-					}, 1200)
 					wx.openCustomerServiceChat({
 						extInfo: { url },
 						corpId,
-						success: () => {
-							if (settled) return
-							settled = true
-							clearTimeout(timer)
-						},
 						fail: (err) => {
-							console.error('openCustomerServiceChat fail:', err)
-							clearTimeout(timer)
-							fallbackToCustomPage()
-						},
-						complete: (res) => {
-							const errMsg = (res && res.errMsg) ? String(res.errMsg) : ''
-							if (errMsg.endsWith(':ok')) {
-								if (!settled) {
-									settled = true
-									clearTimeout(timer)
-								}
-								return
-							}
-							clearTimeout(timer)
-							fallbackToCustomPage()
+							console.warn('openCustomerServiceChat fail:', err)
+							uni.showToast({ title: this.getServiceChatFailTip(err), icon: 'none' })
 						}
 					})
 					return true
 				} catch (e) {
-					console.error('openCustomerServiceChat exception:', e)
+					console.warn('openCustomerServiceChat exception:', e)
+					uni.showToast({ title: '企业客服调用异常，请稍后再试', icon: 'none' })
 					return false
 				}
 				// #endif

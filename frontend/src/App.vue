@@ -60,6 +60,18 @@
 					}
 					return originalReLaunch(options)
 				}
+
+				// 拦截 switchTab
+				const originalSwitchTab = uni.switchTab
+				uni.switchTab = (options) => {
+					if (this.needAuth(options.url, authPages)) {
+						if (!isLogin()) {
+							this.showLoginModal()
+							return
+						}
+					}
+					return originalSwitchTab(options)
+				}
 			},
 
 			// 判断是否需要登录
@@ -70,14 +82,15 @@
 				const path = url.split('?')[0]
 
 				// 检查是否在需要登录的页面列表中
-				return authPages.some(authPage => path === authPage || path.startsWith(authPage))
+				// 严格匹配完整路径，或者以 '页面路径/' 开头（比如带参数或子路由的情况）
+				return authPages.some(authPage => path === authPage || path.startsWith(authPage + '/'))
 			},
 
 			// 显示登录提示
 			showLoginModal() {
 				uni.showModal({
 					title: '提示',
-					content: '请先登录',
+					content: '请退出重新登录',
 					confirmText: '去登录',
 					success: (res) => {
 						if (res.confirm) {

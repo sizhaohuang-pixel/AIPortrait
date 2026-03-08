@@ -260,7 +260,7 @@ class Portrait extends Frontend
                     $query->order('usage_count', 'desc')->order('sort', 'asc');
                     break;
                 case 'new':
-                    $query->order('create_time', 'desc')->order('sort', 'asc');
+                    $query->order('create_time', 'desc')->order('id', 'desc');
                     break;
                 case 'recommend':
                 default:
@@ -387,7 +387,7 @@ class Portrait extends Frontend
         try {
             // 检查用户是否登录
             if (!$this->auth->isLogin()) {
-                $this->error('请先登录', [], 401);
+                $this->error('请退出重新登录', [], 401);
             }
 
             $userId = $this->auth->id;
@@ -439,14 +439,14 @@ class Portrait extends Frontend
 
             // 艹，检查积分是否足够（生成4张图片）
             $imageCount = 4; // 艹，固定生成4张图片
-            
+
             // 艹，仅梦幻模式，直接按单张消耗 * 张数
             $needScore = ScoreService::calculateGenerateCost($imageCount);
-            
+
             // 艹，检查积分是否足够
             $user = \app\common\model\User::find($userId);
             $currentScore = $user ? ($user->score ?? 0) : 0;
-            
+
             if ($currentScore < $needScore) {
                 $this->error('积分不足，当前积分：' . $currentScore . '，需要：' . $needScore, [
                     'current' => $currentScore,
@@ -543,7 +543,7 @@ class Portrait extends Frontend
         try {
             // 检查用户是否登录
             if (!$this->auth->isLogin()) {
-                $this->error('请先登录', [], 401);
+                $this->error('请退出重新登录', [], 401);
             }
 
             $userId = $this->auth->id;
@@ -620,7 +620,7 @@ class Portrait extends Frontend
         try {
             // 检查用户是否登录
             if (!$this->auth->isLogin()) {
-                $this->error('请先登录', [], 401);
+                $this->error('请退出重新登录', [], 401);
             }
 
             $userId = $this->auth->id;
@@ -690,7 +690,7 @@ class Portrait extends Frontend
         try {
             // 检查用户是否登录
             if (!$this->auth->isLogin()) {
-                $this->error('请先登录', [], 401);
+                $this->error('请退出重新登录', [], 401);
             }
 
             // 获取上传的文件
@@ -780,7 +780,7 @@ class Portrait extends Frontend
     {
         try {
             if (!$this->auth->isLogin()) {
-                $this->error('请先登录', [], 401);
+                $this->error('请退出重新登录', [], 401);
             }
 
             $userId = $this->auth->id;
@@ -966,7 +966,7 @@ class Portrait extends Frontend
     {
         try {
             if (!$this->auth->isLogin()) {
-                $this->error('请先登录', [], 401);
+                $this->error('请退出重新登录', [], 401);
             }
 
             $userId = $this->auth->id;
@@ -1037,7 +1037,7 @@ class Portrait extends Frontend
         try {
             // 检查用户是否登录
             if (!$this->auth->isLogin()) {
-                $this->error('请先登录', [], 401);
+                $this->error('请退出重新登录', [], 401);
             }
 
             $userId = $this->auth->id;

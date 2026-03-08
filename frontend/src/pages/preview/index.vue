@@ -1,7 +1,7 @@
 <template>
 	<view class="page">
 		<view class="hero-card">
-			<!-- 艹，直接 v-if 挂在 swiper 上，没数据它压根就不该存在，有了数据再从 0 诞生 -->
+			<!-- 直接 v-if 挂在 swiper 上，有数据再显示 -->
 				<swiper
 					v-if="showSwiper && results && results.length > 0"
 					class="hero-swiper"
@@ -23,7 +23,7 @@
 
 			<view class="badge" v-if="results && results.length > 0">第 {{ activeIndex + 1 }} 张 / {{ results.length }} 张</view>
 
-			<!-- 艹，悬浮操作组，半透明不挡画 -->
+			<!-- 悬浮操作组，半透明不挡画 -->
 			<view class="action-bar">
 				<view class="action-btn" @tap.stop="confirmDelete">
 					<view class="icon-trash"></view>
@@ -63,7 +63,7 @@
 			</view>
 		</view>
 
-		<!-- 艹，定制精修引导：放在信息栏和品牌栏之间，稳得很 -->
+		<!-- 定制精修引导：放在信息栏和品牌栏之间 -->
 		<view class="custom-guide">
 			<text>对结果不满意？可以联系我们</text>
 			<text class="custom-link" @tap="goCustom">定制精修</text>
@@ -74,9 +74,10 @@
 			<view class="brand-sub">留存每一刻心动瞬间</view>
 		</view>
 
-		<!-- 艹，自定义全屏预览层，带操作按钮 -->
-		<view class="preview-overlay" v-if="showPreview" @tap="showPreview = false" @touchmove.stop.prevent>
+		<!-- 自定义全屏预览层，带操作按钮 -->
+		<view class="preview-overlay" v-if="showPreview" @tap="closePreview" @touchmove.stop.prevent>
 			<swiper
+				v-if="!isPreviewZoomed"
 				class="preview-swiper"
 				:current="activeIndex"
 				@change="onSwiperChange"
@@ -85,12 +86,14 @@
 				<swiper-item v-for="(item, index) in results" :key="index" class="preview-swiper-item">
 					<movable-area class="movable-area" scale-area>
 						<movable-view
+							:key="`preview-${index}-${previewRenderVersion}`"
 							class="movable-view"
 							direction="all"
 							scale
 							scale-min="1"
 							scale-max="4"
-							:scale-value="1"
+							scale-value="1"
+							@scale="onPreviewScale($event, index)"
 						>
 							<image
 								class="preview-image"
@@ -102,6 +105,29 @@
 					</movable-area>
 				</swiper-item>
 			</swiper>
+
+			<view v-else class="preview-single" @tap.stop>
+				<movable-area class="movable-area" scale-area>
+					<movable-view
+						:key="`preview-zoomed-${activeIndex}-${previewRenderVersion}`"
+						class="movable-view"
+						direction="all"
+						scale
+						scale-min="1"
+						scale-max="4"
+						scale-value="1"
+						@scale="onPreviewScale($event, activeIndex)"
+					>
+						<image
+							v-if="results[activeIndex]"
+							class="preview-image"
+							:src="results[activeIndex].result_url"
+							mode="aspectFit"
+							@tap.stop
+						></image>
+					</movable-view>
+				</movable-area>
+			</view>
 
 			<!-- 预览层操作栏 -->
 			<view class="preview-action-bar" @tap.stop>
@@ -122,14 +148,14 @@
 				</view>
 			</view>
 
-			<view class="preview-close" @tap="showPreview = false">
+			<view class="preview-close" @tap="closePreview">
 				<text class="close-icon">×</text>
 			</view>
 
 			<view class="preview-badge">{{ activeIndex + 1 }} / {{ results.length }}</view>
 		</view>
 
-		<!-- 艹，老王牌：底部分享菜单 -->
+		<!-- 底部分享菜单 -->
 		<view v-if="showShareMenu" class="share-menu-mask" @tap="showShareMenu = false" @touchmove.stop.prevent>
 			<view class="share-menu-content" @tap.stop>
 				<view class="share-menu-title">分享到</view>
@@ -181,6 +207,8 @@
 				showSwiper: false,
 				previewLock: false,
 				showPreview: false,
+				previewScaleMap: {},
+				previewRenderVersion: 0,
 				showShareMenu: false,
 				showShareGuide: false,
 				hdLoading: false,
@@ -201,7 +229,10 @@
 					}
 					return `height:${this.heroHeightPx}px;`
 				},
-				// 艹，格式化完成时间
+				isPreviewZoomed() {
+					return this.getPreviewScale(this.activeIndex) > 1.01
+				},
+				// 格式化完成时间
 				completeTimeText() {
 				if (!this.task || !this.task.complete_time) {
 					return '未知'
@@ -217,7 +248,7 @@
 			},
 		onLoad(query) {
 			this.taskId = parseInt(query.taskId) || 0
-			// 艹，加载分享配置
+			// 加载分享配置
 			this.loadConfig()
 			if (this.taskId > 0) {
 				this.loadResults()
@@ -232,17 +263,18 @@
 			}
 		},
 
-		// 老王提示：处理返回按钮点击，返回首页而不是上一页
+		// 处理返回按钮点击，返回首页而不是上一页
 		onBackPress() {
 			if (this.showPreview) {
 				this.showPreview = false
+				this.resetPreviewState()
 				return true
 			}
 			uni.switchTab({ url: '/pages/index/index' })
 			return true // 阻止默认返回行为
 		},
 
-		// 艹，微信小程序分享给好友
+		// 微信小程序分享给好友
 		onShareAppMessage(res) {
 			const currentItem = this.results[this.activeIndex]
 			const currentUrl = currentItem ? currentItem.result_url : ''
@@ -254,7 +286,7 @@
 			}
 		},
 
-		// 艹，微信小程序分享到朋友圈
+		// 微信小程序分享到朋友圈
 		onShareTimeline() {
 			const currentItem = this.results[this.activeIndex]
 			const currentUrl = currentItem ? currentItem.result_url : ''
@@ -267,7 +299,36 @@
 		},
 
 		methods: {
-			// 艹，加载全局配置
+			getPreviewScale(index) {
+				const value = Number(this.previewScaleMap[index] || 1)
+				return Number.isFinite(value) ? value : 1
+			},
+			onPreviewScale(e, index) {
+				const scale = Number(e && e.detail ? e.detail.scale : 1)
+				this.previewScaleMap = {
+					...this.previewScaleMap,
+					[index]: Number.isFinite(scale) ? scale : 1
+				}
+			},
+			resetPreviewState() {
+				this.previewScaleMap = {}
+				this.previewRenderVersion += 1
+			},
+			normalizeCorpId(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			normalizeServiceUrl(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			getServiceChatFailTip(err) {
+				const errCode = Number(err && err.errCode ? err.errCode : 0)
+				const errMsg = err && err.errMsg ? String(err.errMsg) : ''
+				if (errCode === 6 || errMsg.includes('check failed')) {
+					return '企微客服配置校验失败，请联系管理员'
+				}
+				return '暂时无法打开企业客服'
+			},
+			// 加载全局配置
 			async loadConfig() {
 				try {
 					const res = await uni.request({
@@ -280,8 +341,8 @@
 							share_timeline_title: res.data.data.share_timeline_title
 						}
 						this.serviceChatConfig = {
-							corpId: res.data.data.service_corp_id || '',
-							url: res.data.data.service_chat_url || ''
+							corpId: this.normalizeCorpId(res.data.data.service_corp_id || ''),
+							url: this.normalizeServiceUrl(res.data.data.service_chat_url || '')
 						}
 					}
 				} catch (e) {
@@ -289,22 +350,26 @@
 				}
 			},
 			openEnterpriseService() {
-				const corpId = String(this.serviceChatConfig.corpId || '').trim()
-				const url = String(this.serviceChatConfig.url || '').trim()
-				if (!corpId || !url) return false
+				const corpId = this.normalizeCorpId(this.serviceChatConfig.corpId || '')
+				const url = this.normalizeServiceUrl(this.serviceChatConfig.url || '')
+				if (!corpId || !url) {
+					uni.showToast({ title: '客服配置缺失，请稍后再试', icon: 'none' })
+					return false
+				}
 				// #ifdef MP-WEIXIN
 				try {
 					wx.openCustomerServiceChat({
 						extInfo: { url },
 						corpId,
 						fail: (err) => {
-							console.error('openCustomerServiceChat fail:', err)
-							uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
+							console.warn('openCustomerServiceChat fail:', err)
+							uni.showToast({ title: this.getServiceChatFailTip(err), icon: 'none' })
 						}
 					})
 					return true
 				} catch (e) {
-					console.error('openCustomerServiceChat exception:', e)
+					console.warn('openCustomerServiceChat exception:', e)
+					uni.showToast({ title: '企业客服调用异常，请稍后再试', icon: 'none' })
 				}
 				// #endif
 				return false
@@ -312,16 +377,19 @@
 			onSwiperChange(e) {
 				this.activeIndex = e.detail.current
 				this.updateHeroHeight()
+				if (this.showPreview) {
+					this.resetPreviewState()
+				}
 			},
 			onImageError(e) {
-				console.error('图片加载失败了，艹！', e.detail)
+				console.error('图片加载失败', e.detail)
 			},
 				setActive(index) {
 					this.activeIndex = index
 					this.updateHeroHeight()
 				},
 
-			// 老王提示：从后端加载任务结果，别tm用Mock数据了
+			// 从后端加载任务结果
 			async loadResults() {
 				try {
 					uni.showLoading({ title: '加载中...' })
@@ -332,13 +400,12 @@
 					}
 
 					this.task = data.task
-					// 艹，只存有 URL 的图片，过滤掉脏数据
+					// 只存有 URL 的图片，过滤掉脏数据
 					const results = (data.results || []).filter(item => item && item.result_url)
 
-					// 艹，老王在线调试：看看图片路径对不对
 					console.log('加载结果成功：', results)
 
-					// 艹，如果没有结果图片，提示用户
+					// 如果没有结果图片，提示用户
 					if (results.length === 0) {
 						uni.showToast({
 							title: '暂无生成结果',
@@ -350,7 +417,7 @@
 						return
 					}
 
-						// 艹，初次加载直接赋值就行，别折腾 nextTick 闪烁了
+						// 初次加载直接赋值
 						this.results = results
 						this.showSwiper = true
 						this.imageAspectMap = {}
@@ -438,7 +505,7 @@
 					return
 				}
 
-				// 艹，下载图片到本地
+				// 下载图片到本地
 				uni.downloadFile({
 					url: currentUrl,
 					success: (res) => {
@@ -451,11 +518,11 @@
 								},
 								fail: (err) => {
 									console.error('保存失败：', err)
-									// 艹，如果用户之前拒绝了授权，引导去设置页
+									// 如果用户之前拒绝了授权，引导去设置页
 									if (err.errMsg.includes('auth deny') || err.errMsg.includes('auth denied')) {
 										uni.showModal({
 											title: '授权提示',
-											content: '老铁，得开了相册权限我才能帮你保存啊！',
+											content: '需要相册权限才能保存图片哦',
 											confirmText: '去开启',
 											success: (modalRes) => {
 												if (modalRes.confirm) {
@@ -493,12 +560,7 @@
 			},
 
 			goCustom() {
-				const opened = this.openEnterpriseService()
-				if (!opened) {
-					uni.navigateTo({
-						url: '/pages/agreement/index?type=custom'
-					})
-				}
+				this.openEnterpriseService()
 			},
 
 			handleShareClick() {
@@ -547,12 +609,18 @@
 			},
 
 			openPreview() {
-				// 艹，物理防抖，防止点太快。而且没数据别特么乱跳。
+				// 物理防抖，防止点太快。无数据时不触发。
 				if (this.previewLock || !this.results || this.results.length === 0) return
+				this.resetPreviewState()
 				this.showPreview = true
 			},
 
-			// 艹，确认删除
+			closePreview() {
+				this.showPreview = false
+				this.resetPreviewState()
+			},
+
+			// 确认删除
 			confirmDelete() {
 				const current = this.results[this.activeIndex]
 				if (!current) return
@@ -569,7 +637,7 @@
 				})
 			},
 
-			// 艹，执行删除
+			// 执行删除
 			async doDelete(id) {
 				try {
 					uni.showLoading({ title: '正在删除...', mask: true })
@@ -577,22 +645,22 @@
 
 					uni.showToast({ title: '已删除', icon: 'success' })
 
-					// 艹，先记下当前要删的位置
+					// 先记下当前要删的位置
 					const targetIndex = this.activeIndex
 
 					// 从本地列表中移除
 					this.results.splice(targetIndex, 1)
 
 					if (this.results.length === 0) {
-						// 滚回历史页
+						// 返回历史页
 						setTimeout(() => {
 							uni.redirectTo({ url: '/pages/history/index' })
 						}, 500)
 						return
 					}
 
-					// 艹，处理索引跳转逻辑
-					// 如果删的是最后一张，索引必须往前挪一位。否则位置不变（后面的会自动顶上来）
+					// 处理索引跳转逻辑
+					// 如果删的是最后一张，索引往前挪一位。否则位置不变
 					if (targetIndex >= this.results.length) {
 						this.activeIndex = Math.max(0, this.results.length - 1)
 					}
@@ -635,7 +703,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 20rpx;
-		z-index: 99; /* 艹，给我到最顶上去 */
+		z-index: 99; /* 保持在最顶层 */
 	}
 
 	.action-btn {
@@ -660,7 +728,7 @@
 		background: rgba(255, 255, 255, 0.7);
 	}
 
-	/* 艹，微信小程序 button 默认样式太恶心了，得干掉 */
+	/* 微信小程序 button 默认样式去除 */
 	.share-btn::after {
 		border: none;
 	}
@@ -730,6 +798,7 @@
 			height: 880rpx;
 			border-radius: 22rpx;
 			overflow: hidden;
+			transition: height 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); /* 增加平滑的过渡动画 */
 		}
 
 	.hero-swiper-item {
@@ -856,7 +925,7 @@
 		color: #9a8f88;
 	}
 
-	/* 艹，全屏预览蒙层样式 */
+	/* 全屏预览蒙层样式 */
 	.preview-overlay {
 		position: fixed;
 		top: 0;
@@ -872,6 +941,12 @@
 	.preview-swiper {
 		flex: 1;
 		width: 100%;
+	}
+
+	.preview-single {
+		flex: 1;
+		width: 100%;
+		height: 100%;
 	}
 
 	.preview-swiper-item {
@@ -913,7 +988,7 @@
 	}
 
 	.preview-action-bar .action-btn .icon-trash {
-		background-color: #e85a4f; /* 艹，预览模式删除也得是红的，醒目！ */
+		background-color: #e85a4f; /* 预览模式删除按钮颜色保持醒目 */
 	}
 
 	.preview-action-bar .action-btn .icon-save,
@@ -956,7 +1031,7 @@
 		backdrop-filter: blur(10px);
 	}
 
-	/* 艹，底部分享菜单样式，保持全站统一 */
+	/* 底部分享菜单样式，保持全站统一 */
 	.share-menu-mask {
 		position: fixed;
 		top: 0;
@@ -1135,3 +1210,4 @@
 	}
 
 </style>
+

@@ -61,25 +61,43 @@
 			this.getPackages()
 		},
 		methods: {
+			normalizeCorpId(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			normalizeServiceUrl(value) {
+				return String(value || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '')
+			},
+			getServiceChatFailTip(err) {
+				const errCode = Number(err && err.errCode ? err.errCode : 0)
+				const errMsg = err && err.errMsg ? String(err.errMsg) : ''
+				if (errCode === 6 || errMsg.includes('check failed')) {
+					return '企微客服配置校验失败，请联系管理员'
+				}
+				return '暂时无法打开企业客服'
+			},
 			async openEnterpriseService() {
 				try {
 					const cfg = await get('/api/score/config')
-					const corpId = String(cfg.service_corp_id || '').trim()
-					const url = String(cfg.service_chat_url || '').trim()
-					if (!corpId || !url) return false
+					const corpId = this.normalizeCorpId(cfg.service_corp_id || '')
+					const url = this.normalizeServiceUrl(cfg.service_chat_url || '')
+					if (!corpId || !url) {
+						uni.showToast({ title: '客服配置缺失，请稍后再试', icon: 'none' })
+						return false
+					}
 					// #ifdef MP-WEIXIN
 					wx.openCustomerServiceChat({
 						extInfo: { url },
 						corpId,
 						fail: (err) => {
-							console.error('openCustomerServiceChat fail:', err)
-							uni.navigateTo({ url: '/pages/agreement/index?type=custom' })
+							console.warn('openCustomerServiceChat fail:', err)
+							uni.showToast({ title: this.getServiceChatFailTip(err), icon: 'none' })
 						}
 					})
 					return true
 					// #endif
 				} catch (error) {
 					console.error('获取客服配置失败:', error)
+					uni.showToast({ title: '客服配置获取失败，请稍后再试', icon: 'none' })
 				}
 				return false
 			},
@@ -227,12 +245,7 @@
 			},
 
 			async goCustomerService() {
-				const opened = await this.openEnterpriseService()
-				if (!opened) {
-					uni.navigateTo({
-						url: '/pages/agreement/index?type=custom'
-					})
-				}
+				await this.openEnterpriseService()
 			}
 		}
 	}

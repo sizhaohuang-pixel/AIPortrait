@@ -69,7 +69,7 @@
 					const data = await getTaskProgress(this.taskId)
 					this.task = data.task
 					this.progress = data.task.progress
-					// 艹，确保status是数字类型
+					// 确保status是数字类型
 					this.status = parseInt(data.task.status)
 					this.results = data.results || []
 
@@ -84,7 +84,7 @@
 							})
 						}, 500)
 					} else if (this.status === 2) {
-						// 艹，任务失败，停止轮询
+						// 任务失败，停止轮询
 						this.clearTimer()
 						console.log('任务失败，已停止轮询')
 

@@ -24,7 +24,14 @@
 					:class="['sub-card', getRatioClass(item.ratio), activeSubId === item.id ? 'is-active' : '']"
 					@tap="setSub(item.id)"
 				>
-					<image :class="['sub-thumb', getRatioClass(item.ratio)]" :src="item.thumb_url" mode="aspectFill" lazy-load></image>
+					<view :class="['sub-thumb-box', getRatioClass(item.ratio)]">
+						<image
+							:class="['sub-thumb', getRatioClass(item.ratio)]"
+							:src="item.thumb_url"
+							:mode="item.ratio === '3:2' ? 'aspectFit' : 'aspectFill'"
+							lazy-load
+						></image>
+					</view>
 				</view>
 			</view>
 		</view>
@@ -277,12 +284,16 @@
 
 	.sub-list {
 		display: flex;
+		align-items: stretch;
 		gap: 18rpx;
 		overflow-x: auto;
 	}
 
 	.sub-card {
 		min-width: 200rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		background: #ffffff;
 		border-radius: 20rpx;
 		padding: 12rpx;
@@ -294,9 +305,34 @@
 		min-width: 300rpx;
 	}
 
+	.sub-card.ratio-portrait,
+	.sub-card.ratio-landscape {
+		height: 328rpx;
+		box-sizing: border-box;
+	}
+
 	.sub-card.is-active {
 		border-color: #2b2521;
 		box-shadow: 0 14rpx 26rpx rgba(37, 30, 25, 0.14);
+	}
+
+	.sub-thumb-box {
+		width: 100%;
+		border-radius: 14rpx;
+		overflow: hidden;
+		background: #f3f3f3;
+	}
+
+	.sub-thumb-box.ratio-portrait {
+		height: 100%;
+	}
+
+	.sub-thumb-box.ratio-landscape {
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: #f6f2ef;
 	}
 
 	.sub-thumb {
@@ -311,8 +347,9 @@
 	}
 
 	.sub-thumb.ratio-landscape {
-		aspect-ratio: 3 / 2;
-		height: auto;
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
 	}
 
 	.tip-section {

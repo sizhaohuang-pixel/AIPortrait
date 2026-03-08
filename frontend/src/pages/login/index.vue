@@ -63,6 +63,7 @@ import { saveLoginInfo } from '../../utils/auth.js'
 import { wechatLogin } from '../../services/user.js'
 import { get, post, uploadFile } from '../../services/request.js'
 import { API_CONFIG } from '../../services/config.js'
+import { parseInviterId, getPendingInviterId } from '../../utils/invite.js'
 
 export default {
 	data() {
@@ -82,22 +83,11 @@ export default {
 	},
 	methods: {
 		initInviterId(query = {}) {
-			let inviterId = Number(query.inviter_id || 0)
-			const scene = query.scene ? decodeURIComponent(query.scene) : ''
-			if (!inviterId && scene) {
-				const pairs = String(scene).split('&')
-				pairs.forEach(pair => {
-					const [k, v] = pair.split('=')
-					if (k === 'inviter_id') {
-						inviterId = Number(v || 0)
-					}
-				})
-			}
-			if (inviterId > 0) {
-				this.inviterId = inviterId
-				uni.setStorageSync('pending_inviter_id', inviterId)
+			const id = parseInviterId(query)
+			if (id > 0) {
+				this.inviterId = id
 			} else {
-				this.inviterId = Number(uni.getStorageSync('pending_inviter_id') || 0)
+				this.inviterId = getPendingInviterId()
 			}
 		},
 		async handleGetPhoneNumber(e) {
@@ -117,7 +107,7 @@ export default {
 			this.loggingIn = true
 
 			try {
-				const inviteId = this.getPendingInviterId()
+				const inviteId = getPendingInviterId()
 				const userInfo = await this.requestWechatLogin(e.detail.code, inviteId)
 				this.userInfo = userInfo
 
@@ -165,7 +155,7 @@ export default {
 			try {
 				uni.showLoading({ title: '上传中...' })
 				const rawUrl = await uploadFile(avatarUrl)
-				this.tempAvatar = this.normalizeUploadedAvatarUrl(rawUrl)
+				this.tempAvatar = rawUrl
 			} catch (err) {
 				uni.showToast({ title: '头像上传失败', icon: 'none' })
 			} finally {
@@ -219,10 +209,6 @@ export default {
 			uni.navigateTo({ url: `/pages/agreement/index?type=${type}` })
 		},
 
-		getPendingInviterId() {
-			return Number(this.inviterId || uni.getStorageSync('pending_inviter_id') || 0)
-		},
-
 		needCompleteProfile(userInfo = {}) {
 			return !userInfo.nickname || /1[3-9]\d\*\*\*\*\d{4}/.test(userInfo.nickname)
 		},
@@ -237,28 +223,6 @@ export default {
 				throw new Error('登录态未建立，请重试')
 			}
 			return userInfo
-		},
-
-		normalizeUploadedAvatarUrl(url) {
-			let fullUrl = String(url || '')
-			if (fullUrl.startsWith('//')) {
-				fullUrl = 'http:' + fullUrl
-			}
-
-			fullUrl = fullUrl.replace(/^https:\/\/(localhost|127\.0\.0\.1)/i, 'http://$1')
-
-			const baseURL = API_CONFIG.baseURL
-			if (baseURL && !baseURL.includes('localhost') && !baseURL.includes('127.0.0.1')) {
-				const baseMatch = baseURL.match(/^(https?:\/\/[^\/]+)/i)
-				if (baseMatch) {
-					fullUrl = fullUrl.replace(/^http?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, baseMatch[1])
-				}
-			}
-
-			if (fullUrl.startsWith('//')) {
-				fullUrl = 'http:' + fullUrl
-			}
-			return fullUrl
 		}
 	}
 }

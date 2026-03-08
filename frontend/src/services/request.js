@@ -1,9 +1,22 @@
 /**
  * 请求封装
- * 老王提示：这个SB文件封装了uni.request，统一处理Token、错误、响应格式
+ * 统一处理Token、错误拦截、响应格式
  */
 
-import { API_CONFIG } from './config.js'
+import { API_CONFIG, HTTP_STATUS } from './config.js'
+
+/**
+ * 获取认证请求头
+ * @returns {Object} 包含token的请求头对象
+ */
+function getAuthHeader() {
+	const token = uni.getStorageSync('token')
+	const header = {}
+	if (token) {
+		header[API_CONFIG.tokenKey] = token
+	}
+	return header
+}
 
 /**
  * 发起HTTP请求
@@ -17,9 +30,6 @@ import { API_CONFIG } from './config.js'
  */
 export function request(options) {
 	return new Promise((resolve, reject) => {
-		// 从本地存储获取 Token（key 是 'token'）
-		const token = uni.getStorageSync('token')
-
 		// 构建完整URL
 		const url = API_CONFIG.baseURL + options.url
 
@@ -29,10 +39,9 @@ export function request(options) {
 			...options.header
 		}
 
-		// 如果需要Token且Token存在，添加到请求头
-		if (options.needToken !== false && token) {
-			// 后端接受的 Token 请求头名称是 'ba-user-token'
-			header['ba-user-token'] = token
+		// 如果需要Token，且存在，则添加
+		if (options.needToken !== false) {
+			Object.assign(header, getAuthHeader())
 		}
 
 		// 发起请求
@@ -52,21 +61,17 @@ export function request(options) {
 
 				// 检查业务状态码
 				const data = res.data
-				if (data.code === 1) {
-					// 请求成功
+				if (data.code === HTTP_STATUS.SUCCESS) {
 					resolve(data.data)
-				} else if (data.code === 401 || data.code === 409) {
-					// Token过期或未登录
+				} else if (data.code === HTTP_STATUS.UNAUTHORIZED || data.code === HTTP_STATUS.CONFLICT) {
 					handleAuthError(data.msg)
 					reject(data)
 				} else {
-					// 业务错误
 					handleError(data.code, data.msg)
 					reject(data)
 				}
 			},
 			fail: (err) => {
-				// 网络错误
 				handleNetworkError(err)
 				reject(err)
 			}
@@ -112,29 +117,36 @@ export function put(url, data = {}, options = {}) {
 
 /**
  * DELETE请求
- * 艹，DELETE请求参数要放在URL查询字符串里，不能放body！
  */
 export function del(url, data = {}, options = {}) {
-	// 艹，把参数拼接到URL上
 	const queryString = Object.keys(data)
 		.map(key => `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`)
 		.join('&')
 
 	const fullUrl = queryString ? `${url}?${queryString}` : url
 
-	// 艹，调试日志
-	console.log('DELETE请求:', {
-		原始URL: url,
-		参数: data,
-		完整URL: fullUrl
-	})
-
 	return request({
 		url: fullUrl,
 		method: 'DELETE',
-		data: {}, // 艹，DELETE请求不传body
+		data: {}, 
 		...options
 	})
+}
+
+/**
+ * 修复部分小程序环境 uploadFile 返回中文乱码的问题
+ * @param {String} str 可能乱码的字符串
+ * @returns {String} 修复后的字符串
+ */
+function fixMojibake(str) {
+	if (!str || typeof str !== 'string') return str
+	try {
+		// 如果是 Latin1 误解码的 UTF-8 字节，escape 会转为 %XX，decodeURIComponent 能正确还原为 UTF-8
+		// 如果是正常的中文，escape 会转为 %uXXXX，decodeURIComponent 不支持 %u 会抛出异常
+		return decodeURIComponent(escape(str))
+	} catch (e) {
+		return str
+	}
 }
 
 /**
@@ -145,28 +157,19 @@ export function del(url, data = {}, options = {}) {
  */
 export function uploadFile(filePath, formData = {}) {
 	return new Promise((resolve, reject) => {
-		// 从本地存储获取 Token（key 是 'token'，不是 'ba-user-token'）
-		const token = uni.getStorageSync('token')
 		const url = API_CONFIG.baseURL + '/api/ajax/upload'
-
-		// 构建请求头，添加 Token
-		const header = {}
-		if (token) {
-			// 后端接受的 Token 请求头名称是 'ba-user-token'
-			header['ba-user-token'] = token
-		}
 
 		uni.uploadFile({
 			url: url,
 			filePath: filePath,
 			name: 'file',
 			formData: formData,
-			header: header,
+			header: getAuthHeader(),
 			success: (res) => {
 				try {
-					const data = JSON.parse(res.data)
-					if (data.code === 1) {
-						// 上传成功，返回完整URL
+					const safeData = fixMojibake(res.data)
+					const data = JSON.parse(safeData)
+					if (data.code === HTTP_STATUS.SUCCESS) {
 						resolve(data.data.file.full_url)
 					} else {
 						handleError(data.code, data.msg)
@@ -187,53 +190,40 @@ export function uploadFile(filePath, formData = {}) {
 
 /**
  * 文件上传到 RunningHub（通过后端代理）
- * 艹，前端上传到后端，后端再上传到 RunningHub，保证 API Key 安全！
  */
 export function upload(filePath) {
 	return new Promise((resolve, reject) => {
-		// 获取 Token
-		const token = uni.getStorageSync('token')
-
-		// 构建请求头
-		const header = {}
-		if (token) {
-			header['ba-user-token'] = token
-		}
-
-		// 艹，构建完整 URL（改为驼峰试试，有些配置不走蛇形）
 		const uploadUrl = API_CONFIG.baseURL + '/api/portrait/uploadToRunningHub'
 
-		// 艹，调试日志
-		console.log('=== upload 函数调试 ===')
-		console.log('API_CONFIG.baseURL:', API_CONFIG.baseURL)
-		console.log('uploadUrl:', uploadUrl)
-		console.log('filePath:', filePath)
-		console.log('token:', token ? '已设置' : '未设置')
-
-		// 艹，上传到自己的后端，后端会转发到 RunningHub
 		uni.uploadFile({
 			url: uploadUrl,
 			filePath: filePath,
 			name: 'file',
-			header: header,
+			header: getAuthHeader(),
 			success: (res) => {
 				try {
-					const data = JSON.parse(res.data)
-					if (data.code === 1) {
-						// 艹，后端返回的是 RunningHub 的图片地址
+					const safeData = fixMojibake(res.data)
+					const data = JSON.parse(safeData)
+					if (data.code === HTTP_STATUS.SUCCESS) {
 						resolve(data.data.url)
 					} else {
-						uni.showToast({ title: data.msg || '上传失败', icon: 'none' })
-						reject(data)
+						reject({
+							...data,
+							msg: data.msg || '上传失败'
+						})
 					}
 				} catch (e) {
-					uni.showToast({ title: '解析响应失败', icon: 'none' })
-					reject(e)
+					reject({
+						msg: '解析响应失败',
+						rawError: e
+					})
 				}
 			},
 			fail: (err) => {
-				uni.showToast({ title: '上传失败', icon: 'none' })
-				reject(err)
+				reject({
+					msg: err?.errMsg || '上传失败',
+					rawError: err
+				})
 			}
 		})
 	})
@@ -244,7 +234,7 @@ export function upload(filePath) {
  */
 function handleAuthError(message) {
 	uni.showToast({
-		title: message || '请先登录',
+		title: message || '请退出重新登录',
 		icon: 'none',
 		duration: 2000
 	})
