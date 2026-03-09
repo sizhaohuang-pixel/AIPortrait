@@ -84,7 +84,7 @@
 			<view class="service-card">
 				<view class="service-main">
 					<text class="service-title">想要更贴合需求的成片效果？</text>
-					<text class="service-desc">可提交你的风格偏好与使用场景，我们提供一对一人工定制服务</text>
+					<text class="service-desc">可提交你的风格偏好与使用场景，联系客服上传模板</text>
 				</view>
 				<view class="service-action" @tap="goCustomerService">人工定制</view>
 			</view>

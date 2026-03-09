@@ -20,8 +20,15 @@
 				@change="onDragChange"
 			>
 				<view class="service-float-btn" @tap.stop="onTapButton">
-					<view class="service-dot"></view>
-					<text class="service-float-text">{{ buttonText }}</text>
+					<view class="service-float-highlight"></view>
+					<view class="service-float-shadow"></view>
+					<view class="service-chat-icon" aria-hidden="true">
+						<view class="chat-bubble-main"></view>
+						<view class="chat-bubble-tail"></view>
+						<view class="chat-bubble-dot chat-bubble-dot-left"></view>
+						<view class="chat-bubble-dot chat-bubble-dot-center"></view>
+						<view class="chat-bubble-dot chat-bubble-dot-right"></view>
+					</view>
 				</view>
 			</movable-view>
 		</movable-area>
@@ -323,29 +330,83 @@
 		right: 0;
 		bottom: 0;
 		border-radius: 50%;
-		background: linear-gradient(145deg, #ff9360 0%, #e85a4f 100%);
-		box-shadow: 0 16rpx 32rpx rgba(232, 90, 79, 0.35);
+		background: linear-gradient(180deg, #f7a37d 0%, #ef7c66 56%, #e85a4f 100%);
+		box-shadow: 0 10rpx 18rpx rgba(120, 53, 44, 0.14), 0 24rpx 48rpx rgba(232, 90, 79, 0.20), 0 0 0 18rpx rgba(255, 144, 109, 0.08), inset -10rpx -8rpx 0 rgba(198, 65, 86, 0.28);
 		display: flex;
-		flex-direction: column;
 		align-items: center;
 		justify-content: center;
+		overflow: hidden;
 		animation: floatBob 2.4s ease-in-out infinite;
 	}
 
-	.service-dot {
-		width: 12rpx;
-		height: 12rpx;
-		border-radius: 50%;
-		background: #ffffff;
-		margin-bottom: 6rpx;
-		box-shadow: 0 0 0 8rpx rgba(255, 255, 255, 0.18);
+	.service-float-highlight {
+		position: absolute;
+		top: 10rpx;
+		left: 18rpx;
+		width: 54rpx;
+		height: 20rpx;
+		border-radius: 999rpx;
+		background: linear-gradient(180deg, rgba(255,255,255,0.56) 0%, rgba(255,255,255,0.1) 100%);
+		transform: rotate(18deg);
 	}
 
-	.service-float-text {
-		color: #ffffff;
-		font-size: 22rpx;
-		font-weight: 600;
-		letter-spacing: 1rpx;
+	.service-float-shadow {
+		position: absolute;
+		right: 4rpx;
+		top: 10rpx;
+		width: 24rpx;
+		height: 76rpx;
+		border-radius: 20rpx;
+		background: linear-gradient(180deg, rgba(195, 66, 88, 0.08) 0%, rgba(195, 66, 88, 0.34) 100%);
+	}
+
+	.service-chat-icon {
+		position: relative;
+		width: 54rpx;
+		height: 50rpx;
+		z-index: 1;
+	}
+
+	.chat-bubble-main {
+		position: absolute;
+		left: 6rpx;
+		top: 6rpx;
+		width: 42rpx;
+		height: 30rpx;
+		background: #ffffff;
+		border-radius: 18rpx;
+	}
+
+	.chat-bubble-tail {
+		position: absolute;
+		left: 12rpx;
+		top: 28rpx;
+		width: 14rpx;
+		height: 14rpx;
+		background: #ffffff;
+		clip-path: polygon(0 0, 100% 0, 0 100%);
+		transform: rotate(-8deg);
+	}
+
+	.chat-bubble-dot {
+		position: absolute;
+		top: 18rpx;
+		width: 6rpx;
+		height: 6rpx;
+		background: rgba(232, 90, 79, 0.22);
+		border-radius: 50%;
+	}
+
+	.chat-bubble-dot-left {
+		left: 17rpx;
+	}
+
+	.chat-bubble-dot-center {
+		left: 25rpx;
+	}
+
+	.chat-bubble-dot-right {
+		left: 33rpx;
 	}
 
 	@keyframes bubbleIn {

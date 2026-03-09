@@ -14,7 +14,8 @@
 			<!-- 微信授权登录按钮 -->
 			<button
 				class="wechat-login-btn"
-				open-type="getPhoneNumber"
+				:open-type="agreementChecked ? 'getPhoneNumber' : ''"
+				@tap="handleLoginTap"
 				@getphonenumber="handleGetPhoneNumber"
 				:loading="loading"
 				:disabled="loading"
@@ -24,11 +25,14 @@
 				</view>
 			</button>
 
-			<view class="tips">
-				<text class="tips-text">登录即表示同意</text>
-				<text class="tips-link" @tap="goAgreement('user')">《用户协议》</text>
+			<view class="tips agreement-row" @tap="toggleAgreement">
+				<view class="agreement-checkbox" :class="{ checked: agreementChecked }">
+					<text v-if="agreementChecked" class="agreement-checkbox-icon">✓</text>
+				</view>
+				<text class="tips-text">我已阅读并同意</text>
+				<text class="tips-link" @tap.stop="goAgreement('user')">《用户协议》</text>
 				<text class="tips-text">和</text>
-				<text class="tips-link" @tap="goAgreement('privacy')">《隐私政策》</text>
+				<text class="tips-link" @tap.stop="goAgreement('privacy')">《隐私政策》</text>
 			</view>
 		</view>
 
@@ -70,6 +74,7 @@ export default {
 		return {
 			loading: false,
 			loggingIn: false,
+			agreementChecked: false,
 			showProfileModal: false,
 			submitting: false,
 			tempAvatar: '',
@@ -92,6 +97,11 @@ export default {
 		},
 		async handleGetPhoneNumber(e) {
 			if (this.loggingIn || this.loading) {
+				return
+			}
+
+			if (!this.agreementChecked) {
+				this.promptAgreementConfirm()
 				return
 			}
 
@@ -147,6 +157,31 @@ export default {
 				this.loading = false
 				this.loggingIn = false
 			}
+		},
+
+		handleLoginTap() {
+			if (this.loggingIn || this.loading || this.agreementChecked) {
+				return
+			}
+
+			this.promptAgreementConfirm()
+		},
+
+		toggleAgreement() {
+			this.agreementChecked = !this.agreementChecked
+		},
+
+		promptAgreementConfirm() {
+			uni.showModal({
+				title: '温馨提示',
+				content: '请先阅读并同意《用户协议》和《隐私政策》',
+				confirmText: '确认勾选',
+				success: (res) => {
+					if (res.confirm) {
+						this.agreementChecked = true
+					}
+				}
+			})
 		},
 
 		async onChooseAvatar(e) {
@@ -319,6 +354,38 @@ export default {
 	text-align: center;
 	font-size: 22rpx;
 	color: #9a8f88;
+}
+
+.agreement-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8rpx;
+	flex-wrap: wrap;
+}
+
+.agreement-checkbox {
+	width: 28rpx;
+	height: 28rpx;
+	border: 2rpx solid #d6ccc5;
+	border-radius: 50%;
+	background: #FFFFFF;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	flex-shrink: 0;
+}
+
+.agreement-checkbox.checked {
+	background: #2b2521;
+	border-color: #2b2521;
+}
+
+.agreement-checkbox-icon {
+	font-size: 18rpx;
+	color: #FFFFFF;
+	line-height: 1;
 }
 
 .tips-text {

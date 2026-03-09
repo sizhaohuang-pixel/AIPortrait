@@ -212,6 +212,7 @@
 				showShareMenu: false,
 				showShareGuide: false,
 				hdLoading: false,
+				hdGenerateCost: 0,
 				serviceChatConfig: {
 					corpId: '',
 					url: ''
@@ -340,6 +341,7 @@
 							share_friend_title: res.data.data.share_friend_title,
 							share_timeline_title: res.data.data.share_timeline_title
 						}
+						this.hdGenerateCost = Number(res.data.data.hd_generate_cost || res.data.data.hd_cost || 0)
 						this.serviceChatConfig = {
 							corpId: this.normalizeCorpId(res.data.data.service_corp_id || ''),
 							url: this.normalizeServiceUrl(res.data.data.service_chat_url || '')
@@ -584,6 +586,23 @@
 					return
 				}
 
+				const hdCost = Number(this.hdGenerateCost || 0)
+				const confirmContent = hdCost > 0
+					? `确认创建当前图片的高清任务？将消耗 ${hdCost} 积分。`
+					: '确认创建当前图片的高清任务？'
+
+				const confirmed = await new Promise(resolve => {
+					uni.showModal({
+						title: '高清确认',
+						content: confirmContent,
+						confirmText: '确认',
+						confirmColor: '#e85a4f',
+						success: (res) => resolve(!!res.confirm),
+						fail: () => resolve(false)
+					})
+				})
+				if (!confirmed) return
+
 				this.hdLoading = true
 
 				try {
@@ -733,15 +752,10 @@
 		border: none;
 	}
 
-	.hd-btn {
-		background: rgba(232, 90, 79, 0.2);
-		border: 1rpx solid rgba(232, 90, 79, 0.35);
-	}
-
 	.hd-text {
 		font-size: 22rpx;
 		font-weight: 700;
-		color: #e85a4f;
+		color: #2b2521;
 		line-height: 1;
 	}
 

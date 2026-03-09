@@ -1,57 +1,70 @@
 <template>
 	<view class="page">
-		<view class="hero">
-			<image :class="['hero-cover', getRatioClass(heroRatio)]" :src="heroCoverUrl" mode="aspectFill" lazy-load></image>
-			<view class="hero-mask"></view>
-			<view class="hero-content">
-				<view class="title">{{ template.title }}</view>
-				<view class="desc">{{ template.desc }}</view>
-			</view>
+		<view v-if="loading" class="page-loading">
+			<view class="page-loading-spinner"></view>
+			<text class="page-loading-text">加载中...</text>
 		</view>
-
-		<view class="section">
-			<view class="tags">
-				<text v-for="tag in template.tags" :key="tag" class="tag">{{ tag }}</text>
+		<block v-else>
+			<view class="hero">
+				<image
+					class="hero-cover"
+					:src="heroCoverUrl"
+					:style="heroCoverStyle"
+					mode="aspectFit"
+					lazy-load
+				></image>
+				<view class="hero-mask"></view>
+				<view class="hero-content">
+					<view class="title">{{ template.title }}</view>
+					<view class="desc">{{ template.desc }}</view>
+				</view>
 			</view>
-		</view>
 
-		<view class="section">
-			<view class="section-title">选择子模板</view>
-			<view class="sub-list">
-				<view
-					v-for="item in processedSubTemplates"
-					:key="item.id"
-					:class="['sub-card', getRatioClass(item.ratio), activeSubId === item.id ? 'is-active' : '']"
-					@tap="setSub(item.id)"
-				>
-					<view :class="['sub-thumb-box', getRatioClass(item.ratio)]">
+			<view class="section">
+				<view class="tags">
+					<text v-for="tag in template.tags" :key="tag" class="tag">{{ tag }}</text>
+				</view>
+			</view>
+
+			<view class="section">
+				<view class="section-title">选择子模板</view>
+				<view class="sub-list">
+					<view
+						v-for="item in processedSubTemplates"
+						:key="item.id"
+						:class="['sub-card', activeSubId === item.id ? 'is-active' : '']"
+						@tap="setSub(item.id)"
+					>
 						<image
-							:class="['sub-thumb', getRatioClass(item.ratio)]"
-							:src="item.thumb_url"
-							:mode="item.ratio === '3:2' ? 'aspectFit' : 'aspectFill'"
+							class="sub-thumb"
+							:src="getSubThumbUrl(item)"
+							:style="getSubThumbStyle(item.id)"
+							mode="aspectFit"
 							lazy-load
 						></image>
 					</view>
 				</view>
 			</view>
-		</view>
 
-		<view class="tip-section">
-			<text class="tip-text">模板仅供参考，生成的姿势、发型等略有区别</text>
-		</view>
+			<view class="tip-section">
+				<text class="tip-text">模板仅供参考，生成的姿势、发型等略有区别</text>
+			</view>
 
-		<view class="footer">
-			<button class="submit-btn" :disabled="!activeSubId" @tap="goToUpload">
-				下一步
-			</button>
-		</view>
-		<floating-service-button :show-signal="serviceSignal" :bottom-offset-upx="170" />
+			<view class="footer">
+				<button class="submit-btn" :disabled="!activeSubId" @tap="goToUpload">
+					下一步
+				</button>
+			</view>
+			<floating-service-button :show-signal="serviceSignal" :bottom-offset-upx="170" />
+		</block>
 	</view>
 </template>
 
 <script>
 	import FloatingServiceButton from '../../components/floating-service-button.vue'
 	import { API_CONFIG } from '../../services/config.js'
+
+	const IMAGE_INFO_TIMEOUT = 6000
 
 	export default {
 		components: {
@@ -60,6 +73,8 @@
 		data() {
 			return {
 				loading: true,
+				heroCoverStyle: 'width: 100%; height: 760rpx;',
+				heroLocalUrl: '',
 				template: {
 					id: 0,
 					title: '',
@@ -69,8 +84,8 @@
 					sub_templates: []
 				},
 				activeSubId: 0,
-				heroRatio: '2:3',
-				subRatioMap: {},
+				subThumbStyleMap: {},
+				subThumbUrlMap: {},
 				serviceSignal: 0
 			}
 		},
@@ -79,7 +94,8 @@
 				const sub = this.processedSubTemplates.find(function(item) {
 					return item.id === this.activeSubId
 				}, this)
-				let url = (sub && sub.thumb_url) || this.template.cover_url
+				const localSubUrl = sub ? this.subThumbUrlMap[sub.id] : ''
+				let url = localSubUrl || (sub && sub.thumb_url) || this.heroLocalUrl || this.template.cover_url
 				if (url && url.startsWith('/') && !url.startsWith('http')) {
 					url = API_CONFIG.baseURL + url
 				}
@@ -93,8 +109,7 @@
 					}
 					return {
 						...sub,
-						thumb_url,
-						ratio: this.subRatioMap[sub.id] || '2:3'
+						thumb_url
 					}
 				})
 			}
@@ -120,12 +135,15 @@
 			async loadTemplateDetail(templateId) {
 				try {
 					this.loading = true
+					this.heroLocalUrl = ''
+					this.subThumbStyleMap = {}
+					this.subThumbUrlMap = {}
 					const data = await this.request(`/api/portrait/template?id=${templateId}`)
 					this.template = data.template
 					if (this.template.sub_templates && this.template.sub_templates.length > 0) {
 						this.activeSubId = this.template.sub_templates[0].id
 					}
-					await this.prepareImageRatios()
+					await Promise.all([this.prepareHeroCoverStyle(), this.prepareSubThumbStyles()])
 				} catch (error) {
 					console.error('加载模板详情失败：', error)
 					uni.showToast({
@@ -138,6 +156,91 @@
 				} finally {
 					this.loading = false
 				}
+			},
+			getImageAsset(src, fallbackStyle) {
+				if (!src) {
+					return Promise.resolve({
+						style: fallbackStyle,
+						url: ''
+					})
+				}
+				return new Promise(resolve => {
+					let finished = false
+					const finish = (payload) => {
+						if (finished) {
+							return
+						}
+						finished = true
+						resolve(payload)
+					}
+					const timer = setTimeout(() => {
+						finish({
+							style: fallbackStyle,
+							url: src
+						})
+					}, IMAGE_INFO_TIMEOUT)
+					uni.getImageInfo({
+						src,
+						success: (res) => {
+							clearTimeout(timer)
+							finish(res)
+						},
+						fail: () => {
+							clearTimeout(timer)
+							finish({
+								style: fallbackStyle,
+								url: src
+							})
+						}
+					})
+				})
+			},
+			async prepareHeroCoverStyle() {
+				let url = this.template.cover_url
+				if (url && url.startsWith('/') && !url.startsWith('http')) {
+					url = API_CONFIG.baseURL + url
+				}
+				if (!url) {
+					this.heroCoverStyle = 'width: 100%; height: 760rpx;'
+					this.heroLocalUrl = ''
+					return
+				}
+				const info = await this.getImageAsset(url, 'width: 100%; height: 760rpx;')
+				if (info.width && info.height) {
+					const ratio = Number(info.height) / Number(info.width)
+					const displayHeight = Math.max(520, Math.min(960, Math.round(686 * ratio)))
+					this.heroCoverStyle = `width: 100%; height: ${displayHeight}rpx;`
+					this.heroLocalUrl = info.path || info.url || url
+					return
+				}
+				this.heroCoverStyle = info.style || 'width: 100%; height: 760rpx;'
+				this.heroLocalUrl = info.url || url
+			},
+			getSubThumbStyle(subId) {
+				return this.subThumbStyleMap[subId] || 'width: 200rpx; height: 240rpx;'
+			},
+			getSubThumbUrl(sub) {
+				return this.subThumbUrlMap[sub.id] || sub.thumb_url
+			},
+			async prepareSubThumbStyles() {
+				const subs = this.processedSubTemplates || []
+				const styleResult = {}
+				const urlResult = {}
+				for (const sub of subs) {
+					const info = await this.getImageAsset(sub.thumb_url, 'width: 200rpx; height: 240rpx;')
+					if (info.width && info.height) {
+						const ratio = Number(info.width) / Number(info.height)
+						const displayHeight = 240
+						const displayWidth = Math.max(140, Math.min(420, Math.round(displayHeight * ratio)))
+						styleResult[sub.id] = `width: ${displayWidth}rpx; height: ${displayHeight}rpx;`
+						urlResult[sub.id] = info.path || info.url || sub.thumb_url
+						continue
+					}
+					styleResult[sub.id] = info.style || 'width: 200rpx; height: 240rpx;'
+					urlResult[sub.id] = info.url || sub.thumb_url
+				}
+				this.subThumbStyleMap = styleResult
+				this.subThumbUrlMap = urlResult
 			},
 			request(url) {
 				return new Promise((resolve, reject) => {
@@ -157,25 +260,8 @@
 					})
 				})
 			},
-			getRatioClass(ratio) {
-				return ratio === '3:2' ? 'ratio-landscape' : 'ratio-portrait'
-			},
-			prepareImageRatios() {
-				const map = {}
-				const subs = this.template.sub_templates || []
-				subs.forEach((sub) => {
-					map[sub.id] = sub.thumb_ratio === '3:2' ? '3:2' : '2:3'
-				})
-				this.subRatioMap = map
-				if (this.activeSubId && map[this.activeSubId]) {
-					this.heroRatio = map[this.activeSubId]
-					return
-				}
-				this.heroRatio = this.template.cover_ratio === '3:2' ? '3:2' : '2:3'
-			},
 			setSub(subId) {
 				this.activeSubId = subId
-				this.heroRatio = this.subRatioMap[subId] || '2:3'
 			},
 			goToUpload() {
 				if (!this.activeSubId) {
@@ -205,6 +291,31 @@
 		font-family: "HarmonyOS Sans", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
 	}
 
+	.page-loading {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 40rpx;
+		box-sizing: border-box;
+	}
+
+	.page-loading-spinner {
+		width: 72rpx;
+		height: 72rpx;
+		border-radius: 50%;
+		border: 6rpx solid rgba(232, 90, 79, 0.16);
+		border-top-color: #e85a4f;
+		animation: spin 0.9s linear infinite;
+	}
+
+	.page-loading-text {
+		margin-top: 24rpx;
+		font-size: 26rpx;
+		color: #8b7d75;
+	}
+
 	.hero {
 		position: relative;
 		padding: 20rpx 20rpx 0;
@@ -214,16 +325,7 @@
 		width: 100%;
 		border-radius: 28rpx;
 		background: #f3f3f3;
-	}
-
-	.hero-cover.ratio-portrait {
-		aspect-ratio: 2 / 3;
-		height: auto;
-	}
-
-	.hero-cover.ratio-landscape {
-		aspect-ratio: 3 / 2;
-		height: auto;
+		display: block;
 	}
 
 	.hero-mask {
@@ -234,6 +336,7 @@
 		height: 160rpx;
 		border-radius: 0 0 28rpx 28rpx;
 		background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(15, 12, 10, 0.45) 100%);
+		pointer-events: none;
 	}
 
 	.hero-content {
@@ -284,13 +387,13 @@
 
 	.sub-list {
 		display: flex;
-		align-items: stretch;
+		align-items: center;
 		gap: 18rpx;
 		overflow-x: auto;
 	}
 
 	.sub-card {
-		min-width: 200rpx;
+		flex: 0 0 auto;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -301,55 +404,16 @@
 		box-shadow: 0 10rpx 20rpx rgba(37, 30, 25, 0.06);
 	}
 
-	.sub-card.ratio-landscape {
-		min-width: 300rpx;
-	}
-
-	.sub-card.ratio-portrait,
-	.sub-card.ratio-landscape {
-		height: 328rpx;
-		box-sizing: border-box;
-	}
-
 	.sub-card.is-active {
 		border-color: #2b2521;
 		box-shadow: 0 14rpx 26rpx rgba(37, 30, 25, 0.14);
 	}
 
-	.sub-thumb-box {
-		width: 100%;
-		border-radius: 14rpx;
-		overflow: hidden;
-		background: #f3f3f3;
-	}
-
-	.sub-thumb-box.ratio-portrait {
-		height: 100%;
-	}
-
-	.sub-thumb-box.ratio-landscape {
-		height: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: #f6f2ef;
-	}
-
 	.sub-thumb {
-		width: 100%;
 		border-radius: 14rpx;
 		background: #f3f3f3;
-	}
-
-	.sub-thumb.ratio-portrait {
-		aspect-ratio: 2 / 3;
-		height: auto;
-	}
-
-	.sub-thumb.ratio-landscape {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
+		display: block;
+		flex: 0 0 auto;
 	}
 
 	.tip-section {
@@ -372,13 +436,6 @@
 		background-color: #9a8f88;
 		mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E") no-repeat center / contain;
 		-webkit-mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E") no-repeat center / contain;
-	}
-
-	@supports (aspect-ratio: 1 / 1) {
-		.hero-cover,
-		.sub-thumb {
-			height: auto;
-		}
 	}
 
 	.footer {
@@ -407,6 +464,14 @@
 		color: #ffffff;
 		box-shadow: none;
 	}
+
+	@keyframes spin {
+		from {
+			transform: rotate(0deg);
+		}
+
+		to {
+			transform: rotate(360deg);
+		}
+	}
 </style>
-
-
