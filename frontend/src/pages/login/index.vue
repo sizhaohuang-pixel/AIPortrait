@@ -2,7 +2,7 @@
 	<view class="login-page">
 		<!-- Logo 区域 -->
 		<view class="logo-section">
-			<text class="app-name">非鱼影像馆</text>
+			<text class="app-name">非鱼印像</text>
 			<text class="slogan">记录美好瞬间</text>
 		</view>
 

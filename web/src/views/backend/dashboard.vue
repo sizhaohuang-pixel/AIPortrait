@@ -8,7 +8,7 @@
                         <img class="welcome-img" :src="headerSvg" alt="" />
                         <div class="welcome-text">
                             <div class="welcome-title">{{ adminInfo.nickname + '，' + getGreet() }}</div>
-                            <div class="welcome-note">欢迎使用非鱼影像馆管理系统</div>
+                            <div class="welcome-note">欢迎使用非鱼印像管理系统</div>
                         </div>
                     </div>
                 </el-col>

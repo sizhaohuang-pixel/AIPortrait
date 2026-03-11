@@ -3,7 +3,7 @@
 		{
 			"path": "pages/index/index",
 			"style": {
-				"navigationBarTitleText": "非鱼影像馆"
+				"navigationBarTitleText": "非鱼印像"
 			}
 		},
 		{
@@ -134,7 +134,7 @@
 		{
 			"path": "pages/share/index",
 			"style": {
-				"navigationBarTitleText": "非鱼影像馆",
+				"navigationBarTitleText": "非鱼印像",
 				"navigationBarBackgroundColor": "#F8F8F8"
 			}
 		}
